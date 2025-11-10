@@ -10,7 +10,15 @@ RUN apk add --no-cache \
     musl-dev \
     linux-headers \
     git \
-    swig
+    swig \
+    make
+
+# Build and install lgpio C library (needed by rpi-lgpio)
+RUN git clone https://github.com/joan2937/lg.git /tmp/lg \
+    && make -C /tmp/lg \
+    && make -C /tmp/lg install \
+    && cp -a /usr/local/lib/liblgpio.so* /usr/lib/ || true \
+    && rm -rf /tmp/lg
 
 # Install Python packages
 RUN pip3 install --no-cache-dir \
