@@ -28,10 +28,8 @@ LORA_FREQ = float(os.getenv('LORA_FREQ', '915.0'))
 LORA_SF = int(os.getenv('LORA_SF', '7'))
 LORA_BW = int(os.getenv('LORA_BW', '125000'))
 LORA_CR = int(os.getenv('LORA_CR', '5'))
-# Sync word: Use single-byte 0x34 (standard LoRa private network)
-# Note: Config sends as decimal, so 0x34 = 52 or can use string "0x34"
-LORA_SW_STR = os.getenv('LORA_SW', '0x34')
-LORA_SW = int(LORA_SW_STR, 16) if LORA_SW_STR.startswith('0x') else int(LORA_SW_STR)
+# Sync word: default 52 (decimal) = 0x34 (hex) = standard LoRa private network
+LORA_SW = int(os.getenv('LORA_SW', '52'))
 LORA_POWER = int(os.getenv('LORA_POWER', '20'))
 
 MQTT_HOST = os.getenv('MQTT_HOST', 'core-mosquitto')
