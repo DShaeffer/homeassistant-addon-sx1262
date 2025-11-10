@@ -286,6 +286,15 @@ def setup_lora():
         logger.info(f"Setting sync word to 0x{LORA_SW:02X} (decimal {LORA_SW})...")
         lora.setSyncWord(LORA_SW)
         
+        # Set packet parameters to match ESP32 Heltec configuration
+        logger.info("Setting packet parameters...")
+        # ESP32 uses: preamble=8, variable length header, CRC on, IQ normal
+        lora.setHeaderType(lora.HEADER_EXPLICIT)  # Variable length (not fixed)
+        lora.setPreambleLength(8)  # Match ESP32 LORA_PREAMBLE_LENGTH
+        lora.setCrcEnable(True)    # Match ESP32 CRC enabled
+        lora.setInvertIq(False)    # Match ESP32 LORA_IQ_INVERSION_ON false
+        logger.info("  Preamble: 8, Header: Explicit, CRC: On, IQ: Normal")
+        
         # Set TX power (SX1262 supports up to +22dBm)
         logger.info(f"Setting TX power to {LORA_POWER} dBm...")
         lora.setTxPower(LORA_POWER, lora.TX_POWER_SX1262)
@@ -301,6 +310,10 @@ def setup_lora():
         logger.info(f"  Bandwidth: {LORA_BW} Hz")
         logger.info(f"  Coding Rate: 4/{LORA_CR}")
         logger.info(f"  Sync Word: 0x{LORA_SW:02X}")
+        logger.info(f"  Preamble Length: 8")
+        logger.info(f"  Header Type: Explicit (variable length)")
+        logger.info(f"  CRC: Enabled")
+        logger.info(f"  IQ Inversion: Normal")
         logger.info(f"  TX Power: {LORA_POWER} dBm")
         
         return lora
