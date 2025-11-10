@@ -881,6 +881,12 @@ void setup() {
 // ============================================================================
 
 void loop() {
+    // CRITICAL: Process radio events to service LoRa callbacks
+    // Without this, OnTxDone/OnTxTimeout will never fire!
+    if (loraInitialized && ENABLE_LORA) {
+        Radio.IrqProcess();
+    }
+    
     // Read sensor serial data
     readSensorSerial();
     

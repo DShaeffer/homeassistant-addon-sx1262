@@ -100,8 +100,10 @@ void transmitTest(uint8_t syncWord, int testNumber) {
     txInProgress = true;
     Radio.Send(txBuffer, len);
     
-    // Wait for TX to complete
-    delay(100);
+    // Wait a bit for transmission to start
+    delay(50);
+    
+    // Note: OnTxDone() callback will be called by Radio.IrqProcess() in loop()
 }
 
 void setup() {
@@ -129,6 +131,9 @@ void setup() {
 
 void loop() {
     static int testCycle = 0;
+    
+    // CRITICAL: Process radio events to service callbacks
+    Radio.IrqProcess();
     
     if (!txInProgress && millis() - lastTxTime >= 10000) {
         testCycle++;

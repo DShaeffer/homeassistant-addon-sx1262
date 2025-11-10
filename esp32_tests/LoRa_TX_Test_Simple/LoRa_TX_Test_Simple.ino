@@ -164,7 +164,10 @@ void transmitTestMessage() {
     txInProgress = true;
     Radio.Send(txBuffer, len);
     
-    // Note: OnTxDone() callback will print completion
+    // Wait a bit for transmission to start
+    delay(50);
+    
+    // Note: OnTxDone() callback will be called by Radio.IrqProcess() in loop()
 }
 
 // ============================================================================
@@ -200,8 +203,12 @@ void setup() {
 // ============================================================================
 
 void loop() {
+    // CRITICAL: Process radio events
+    // The Heltec library requires calling Radio.IrqProcess() to service callbacks
+    Radio.IrqProcess();
+    
     // Transmit at regular intervals
-    if (millis() - lastTxTime >= TX_INTERVAL_MS) {
+    if (!txInProgress && millis() - lastTxTime >= TX_INTERVAL_MS) {
         transmitTestMessage();
         lastTxTime = millis();
     }
