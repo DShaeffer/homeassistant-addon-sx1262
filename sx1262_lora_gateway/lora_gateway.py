@@ -147,15 +147,14 @@ def parse_and_publish_sensor_data(payload):
         return False
 
 def on_lora_receive(lora):
-    """Callback when LoRa message is received"""
+    """Check for received LoRa messages"""
     global stats
     
     try:
-        # Check if packet is available
-        lora.request()
-        code = lora.wait()
+        # Check status (non-blocking for continuous RX)
+        status = lora.status()
         
-        if code == lora.STATUS_RX_DONE:
+        if status == lora.STATUS_RX_DONE:
             stats['messages_received'] += 1
             
             # Read payload
@@ -291,12 +290,10 @@ def setup_lora():
         logger.info(f"Setting TX power to {LORA_POWER} dBm...")
         lora.setTxPower(LORA_POWER, lora.TX_POWER_SX1262)
         
-        # Set to receive mode
-        logger.info("Setting to receive mode...")
-        lora.request()
-        logger.info("Waiting for receive mode...")
-        lora.wait()
-        logger.info("Receive mode active")
+        # Set to continuous receive mode
+        logger.info("Setting to continuous receive mode...")
+        lora.request(lora.RX_CONTINUOUS)
+        logger.info("Receive mode active (continuous)")
         
         logger.info(f"LoRa configured:")
         logger.info(f"  Frequency: {LORA_FREQ} MHz")
