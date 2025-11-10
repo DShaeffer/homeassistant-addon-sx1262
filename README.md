@@ -1,0 +1,1 @@
+# homeassistant-addon-sx1262
