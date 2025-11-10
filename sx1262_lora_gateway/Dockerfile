@@ -12,10 +12,10 @@ RUN apk add --no-cache \
 
 # Install Python packages
 RUN pip3 install --no-cache-dir \
-    pyLoRa \
     RPi.GPIO \
     spidev \
-    paho-mqtt
+    paho-mqtt \
+    dragino
 
 # Copy data
 COPY run.sh /
