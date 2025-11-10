@@ -14,8 +14,11 @@ RUN apk add --no-cache \
 RUN pip3 install --no-cache-dir \
     RPi.GPIO \
     spidev \
-    paho-mqtt \
-    dragino
+    paho-mqtt
+
+# Install SX126x library from GitHub
+RUN pip3 install --no-cache-dir \
+    git+https://github.com/waveshare/SX126x-LoRa-HAT.git
 
 # Copy data
 COPY run.sh /
