@@ -1,5 +1,5 @@
 name: "SX1262 LoRa Gateway"
-version: "1.1.0"
+version: "1.1.1"
 slug: sx1262_lora_gateway
 description: "LoRa receiver for Waveshare SX1262 HAT - receives data from ESP32 water sensor bridge"
 arch:
@@ -13,10 +13,13 @@ hassio_api: true
 homeassistant_api: true
 host_network: true
 devices:
-  - /dev/spidev0.0
-  - /dev/gpiomem
-  - /dev/gpiochip0
+  - /dev/spidev0.0:/dev/spidev0.0:rwm
+  - /dev/gpiomem:/dev/gpiomem:rwm
+  - /dev/gpiochip0:/dev/gpiochip0:rwm
+  - /dev/mem:/dev/mem:rwm
 gpio: true
+kernel_modules: true
+full_access: true
 privileged:
   - SYS_RAWIO
 options:
