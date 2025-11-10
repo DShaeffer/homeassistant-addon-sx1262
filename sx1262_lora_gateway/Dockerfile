@@ -13,7 +13,7 @@ RUN apk add --no-cache \
 
 # Install Python packages
 RUN pip3 install --no-cache-dir \
-    RPi.GPIO \
+    rpi-lgpio \
     spidev \
     paho-mqtt
 
