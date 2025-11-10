@@ -250,33 +250,53 @@ def setup_lora():
         
         logger.info(f"Pin configuration: RESET={resetPin}, BUSY={busyPin}, IRQ={irqPin}, TXEN={txenPin}")
         
+        logger.info("Creating SX126x object...")
         lora = SX126x()
+        logger.info("SX126x object created")
         
         # Initialize the radio
         logger.info("Calling lora.begin()...")
-        if not lora.begin(busId, csId, resetPin, busyPin, irqPin, txenPin, rxenPin):
+        begin_result = lora.begin(busId, csId, resetPin, busyPin, irqPin, txenPin, rxenPin)
+        logger.info(f"lora.begin() returned: {begin_result}")
+        
+        if not begin_result:
             raise Exception("Failed to initialize SX1262 radio")
         
+        logger.info("Radio initialized successfully")
+        
         # Configure for Raspberry Pi RF switch
+        logger.info("Configuring DIO2 RF switch...")
         lora.setDio2RfSwitch()
+        logger.info("DIO2 RF switch configured")
         
         # Set frequency (convert MHz to Hz)
+        logger.info(f"Setting frequency to {LORA_FREQ} MHz...")
         lora.setFrequency(int(LORA_FREQ * 1000000))
         
         # Configure modulation parameters
+        logger.info(f"Setting spreading factor to {LORA_SF}...")
         lora.setSpreadingFactor(LORA_SF)
+        
+        logger.info(f"Setting bandwidth to {LORA_BW} Hz...")
         lora.setBandwidth(LORA_BW)
+        
+        logger.info(f"Setting code rate to 4/{LORA_CR}...")
         lora.setCodeRate(LORA_CR)
         
         # Set sync word
+        logger.info(f"Setting sync word to 0x{LORA_SW:02X} (decimal {LORA_SW})...")
         lora.setSyncWord(LORA_SW)
         
         # Set TX power (SX1262 supports up to +22dBm)
+        logger.info(f"Setting TX power to {LORA_POWER} dBm...")
         lora.setTxPower(LORA_POWER, lora.TX_POWER_SX1262)
         
         # Set to receive mode
+        logger.info("Setting to receive mode...")
         lora.request()
+        logger.info("Waiting for receive mode...")
         lora.wait()
+        logger.info("Receive mode active")
         
         logger.info(f"LoRa configured:")
         logger.info(f"  Frequency: {LORA_FREQ} MHz")
