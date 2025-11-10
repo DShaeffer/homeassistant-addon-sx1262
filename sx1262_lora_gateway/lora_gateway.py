@@ -152,52 +152,59 @@ def on_lora_receive(lora):
     
     try:
         # Check IRQ status for any activity
-        irq_status = lora.getIrqStatus()
-        
-        # Log any IRQ activity (for debugging)
-        if irq_status != 0:
-            logger.debug(f"IRQ Status: 0x{irq_status:04X}")
+        try:
+            irq_status = lora.getIrqStatus()
             
-            # Check for specific IRQs
-            if irq_status & lora.IRQ_PREAMBLE_DETECTED:
-                logger.info("📡 Preamble detected!")
-            if irq_status & lora.IRQ_HEADER_VALID:
-                logger.info("📡 Valid header detected!")
-            if irq_status & lora.IRQ_HEADER_ERR:
-                logger.warning("⚠️  Header error!")
-            if irq_status & lora.IRQ_CRC_ERR:
-                logger.warning("⚠️  CRC error!")
-            if irq_status & lora.IRQ_TIMEOUT:
-                logger.debug("RX timeout (normal, waiting for packet)")
+            # Log any IRQ activity (for debugging)
+            if irq_status != 0:
+                logger.debug(f"IRQ Status: 0x{irq_status:04X}")
+                
+                # Check for specific IRQs
+                if irq_status & lora.IRQ_PREAMBLE_DETECTED:
+                    logger.info("📡 Preamble detected!")
+                if irq_status & lora.IRQ_HEADER_VALID:
+                    logger.info("📡 Valid header detected!")
+                if irq_status & lora.IRQ_HEADER_ERR:
+                    logger.warning("⚠️  Header error!")
+                if irq_status & lora.IRQ_CRC_ERR:
+                    logger.warning("⚠️  CRC error!")
+                if irq_status & lora.IRQ_TIMEOUT:
+                    logger.debug("RX timeout (normal, waiting for packet)")
+        except Exception as e:
+            logger.error(f"Error reading IRQ status: {e}")
+            return
         
         # Check status (non-blocking for continuous RX)
-        status = lora.status()
-        
-        if status == lora.STATUS_RX_DONE:
-            stats['messages_received'] += 1
+        try:
+            status = lora.status()
             
-            # Read payload
-            message = []
-            while lora.available() > 0:
-                message.append(lora.read())
-            
-            # Convert to string
-            payload = bytes(message).decode('utf-8', errors='ignore')
-            
-            # Get RSSI and SNR
-            rssi = lora.packetRssi()
-            snr = lora.packetSnr()
-            
-            logger.info(f"✅ LoRa RX: {len(payload)} bytes, RSSI={rssi}dBm, SNR={snr}dB")
-            logger.debug(f"Raw payload: {payload}")
-            
-            # Publish signal quality
-            publish_to_mqtt(f"{MQTT_PREFIX}/rssi", str(rssi))
-            publish_to_mqtt(f"{MQTT_PREFIX}/snr", str(snr))
-            
-            # Parse and publish sensor data
-            if payload.strip():
-                parse_and_publish_sensor_data(payload.strip())
+            if status == lora.STATUS_RX_DONE:
+                stats['messages_received'] += 1
+                
+                # Read payload
+                message = []
+                while lora.available() > 0:
+                    message.append(lora.read())
+                
+                # Convert to string
+                payload = bytes(message).decode('utf-8', errors='ignore')
+                
+                # Get RSSI and SNR
+                rssi = lora.packetRssi()
+                snr = lora.packetSnr()
+                
+                logger.info(f"✅ LoRa RX: {len(payload)} bytes, RSSI={rssi}dBm, SNR={snr}dB")
+                logger.debug(f"Raw payload: {payload}")
+                
+                # Publish signal quality
+                publish_to_mqtt(f"{MQTT_PREFIX}/rssi", str(rssi))
+                publish_to_mqtt(f"{MQTT_PREFIX}/snr", str(snr))
+                
+                # Parse and publish sensor data
+                if payload.strip():
+                    parse_and_publish_sensor_data(payload.strip())
+        except Exception as e:
+            logger.error(f"Error checking status: {e}")
                 
     except Exception as e:
         logger.error(f"Error in LoRa receive handler: {e}")
