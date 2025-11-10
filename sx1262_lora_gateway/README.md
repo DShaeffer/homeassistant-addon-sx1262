@@ -1,61 +1,32 @@
-﻿# Home Assistant Add-ons for SX1262 LoRa# SX1262 LoRa Gateway Add-on for Home Assistant
+﻿# SX1262 LoRa Gateway Add-on for Home Assistant
 
-
-
-This repository contains Home Assistant add-ons for working with SX1262 LoRa devices.This add-on enables your Raspberry Pi with a Waveshare SX1262 LoRaWAN HAT to receive LoRa messages from 
-
+This add-on enables your Raspberry Pi with a Waveshare SX1262 LoRaWAN HAT to receive LoRa messages from 
 remote sensors (such as the ESP32 water sensor bridge) and integrate them into Home Assistant via MQTT. 
+## Hardware Requirements
 
-## Add-ons## Hardware Requirements
-
-
-
-### SX1262 LoRa Gateway- Raspberry Pi (3/4/5 or Zero 2 W)
-
+- Raspberry Pi (3/4/5 or Zero 2 W)
 - [Waveshare SX1262 LoRaWAN HAT](https://www.waveshare.com/sx1262-lorawan-hat.htm)
+- Properly installed HAT on GPIO pins
 
-A LoRa receiver add-on for Waveshare SX1262 HAT that receives data from remote sensors and publishes to MQTT.- Properly installed HAT on GPIO pins
+## Features
 
-
-
-[![Add repository to Home Assistant][repository-badge]][repository-url]## Features
-
-
-
-## Installation- Receives LoRa messages on 915MHz (configurable)
-
+- Receives LoRa messages on 915MHz (configurable)
 - Parses JSON sensor data from ESP32 bridge
-
-1. Click the button above or manually add this repository to your Home Assistant instance:- Publishes to MQTT for Home Assistant integration
-
-   - Go to **Settings** → **Add-ons** → **Add-on Store** - Configurable LoRa parameters (SF, BW, CR, sync word)
-
-   - Click the three dots menu (⋮) in the top right- Signal quality monitoring (RSSI, SNR)
-
-   - Select **Repositories**- Gateway statistics tracking
-
-   - Add: `https://github.com/DShaeffer/homeassistant-addon-sx1262`- Auto-discovery compatible MQTT topics
-
-   - Click **Add**
+- Publishes to MQTT for Home Assistant integration
+- Configurable LoRa parameters (SF, BW, CR, sync word)
+- Signal quality monitoring (RSSI, SNR)
+- Gateway statistics tracking
+- Auto-discovery compatible MQTT topics
 
 ## Installation
 
-2. The add-ons from this repository will now be available in your add-on store.
-
 1. **Enable SPI on your Raspberry Pi:**
-
-## Support   - Go to Supervisor â System â Host â Hardware
-
+   - Go to Supervisor â System â Host â Hardware
    - Click the three dots menu â "Import from USB"
+   - Or via SSH: `raspi-config` â Interfacing Options â SPI â Enable
 
-For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/DShaeffer/homeassistant-addon-sx1262).   - Or via SSH: `raspi-config` â Interfacing Options â SPI â Enable
-
-
-
-[repository-badge]: https://img.shields.io/badge/Add%20repository%20to%20my-Home%20Assistant-41BDF5?logo=home-assistant&style=for-the-badge2. **Add the repository to Home Assistant:**
-
-[repository-url]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FDShaeffer%2Fhomeassistant-addon-sx1262   - Go to Supervisor â Add-on Store
-
+2. **Add the repository to Home Assistant:**
+   - Go to Supervisor â Add-on Store
    - Click the three dots menu (top right) â Repositories
    - Add this repository URL: `file:///config/addons/homeassistant-addon-sx1262`
    - Or copy the addon folder to `/addons/` directory
