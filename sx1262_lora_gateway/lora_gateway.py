@@ -191,7 +191,10 @@ def setup_mqtt():
     global mqtt_client
     
     logger.info("Setting up MQTT connection...")
-    mqtt_client = mqtt.Client("sx1262_lora_gateway")
+    mqtt_client = mqtt.Client(
+        client_id="sx1262_lora_gateway",
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION1
+    )
     
     # Set last will (offline status)
     mqtt_client.will_set(f"{MQTT_PREFIX}/status", "offline", retain=True)
