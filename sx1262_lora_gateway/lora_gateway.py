@@ -220,6 +220,19 @@ def setup_lora():
     logger.info("Setting up SX1262 LoRa radio...")
     
     try:
+        # Check if SPI device exists
+        import glob
+        spi_devices = glob.glob('/dev/spi*')
+        logger.info(f"Available SPI devices: {spi_devices}")
+        
+        # Check /dev contents
+        import subprocess
+        try:
+            dev_list = subprocess.check_output(['ls', '-la', '/dev/'], text=True)
+            logger.debug(f"Contents of /dev/:\n{dev_list}")
+        except:
+            pass
+        
         # Waveshare SX1262 HAT pinout for Raspberry Pi
         busId = 0           # SPI bus 0
         csId = 0            # SPI CS 0 (/dev/spidev0.0)
