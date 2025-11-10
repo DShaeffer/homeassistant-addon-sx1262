@@ -383,11 +383,17 @@ def main():
     # Publish initial stats
     publish_statistics()
     last_stats_time = time.time()
+    last_heartbeat = time.time()
     
     try:
         while True:
             # Check for received packets
             on_lora_receive(lora)
+            
+            # Heartbeat every 10 seconds
+            if time.time() - last_heartbeat > 10:
+                logger.info(f"💓 Heartbeat - Listening... (checked {stats['messages_received']} packets so far)")
+                last_heartbeat = time.time()
             
             # Publish statistics every 60 seconds
             if time.time() - last_stats_time > 60:
