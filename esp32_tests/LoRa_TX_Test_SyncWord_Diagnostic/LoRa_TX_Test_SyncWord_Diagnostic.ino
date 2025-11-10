@@ -26,11 +26,33 @@
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
 
+// Optional RF switch pins for clone boards
+#ifndef LORA_TXEN_PIN
+#define LORA_TXEN_PIN -1
+#endif
+#ifndef LORA_RXEN_PIN
+#define LORA_RXEN_PIN -1
+#endif
+
 static RadioEvents_t RadioEvents;
 bool txInProgress = false;
 int currentTest = 0;
 uint32_t lastTxTime = 0;
 uint32_t txStartTime = 0;
+
+// RF switch helpers
+void rfSwitchInit() {
+    if (LORA_TXEN_PIN >= 0) pinMode(LORA_TXEN_PIN, OUTPUT);
+    if (LORA_RXEN_PIN >= 0) pinMode(LORA_RXEN_PIN, OUTPUT);
+}
+void rfSwitchToRx() {
+    if (LORA_TXEN_PIN >= 0) digitalWrite(LORA_TXEN_PIN, LOW);
+    if (LORA_RXEN_PIN >= 0) digitalWrite(LORA_RXEN_PIN, HIGH);
+}
+void rfSwitchToTx() {
+    if (LORA_RXEN_PIN >= 0) digitalWrite(LORA_RXEN_PIN, LOW);
+    if (LORA_TXEN_PIN >= 0) digitalWrite(LORA_TXEN_PIN, HIGH);
+}
 
 void OnTxDone(void) {
     Serial.println("✅ TX Done\n");
@@ -78,6 +100,9 @@ void initLoRa(uint8_t syncWord) {
     
     Radio.SetChannel(LORA_FREQUENCY);
     
+    rfSwitchInit();
+    rfSwitchToRx();
+
     Serial.printf("✅ LoRa ready: 915MHz, SF7, BW125, Sync=0x%02X\n", syncWord);
 }
 
@@ -98,6 +123,7 @@ void transmitTest(uint8_t syncWord, int testNumber) {
     Serial.printf("Length:  %d bytes\n", len);
     Serial.println("Transmitting...");
     
+    rfSwitchToTx();
     txInProgress = true;
     txStartTime = millis();
     Radio.Send(txBuffer, len);
@@ -147,6 +173,7 @@ void loop() {
             Serial.println("❌ TX stuck beyond timeout. Forcing standby (sync test).\n");
             Radio.Standby();
             txInProgress = false;
+            rfSwitchToRx();
         }
     }
     

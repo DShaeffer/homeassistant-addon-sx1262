@@ -33,6 +33,16 @@
 
 #define TX_INTERVAL_MS 5000           // Transmit every 5 seconds
 
+// Optional: Some clone boards require manual RF switch control
+// Set these to the GPIO numbers for TXEN and RXEN if your board exposes them
+// Leave as -1 if not used / controlled internally by the driver
+#ifndef LORA_TXEN_PIN
+#define LORA_TXEN_PIN -1
+#endif
+#ifndef LORA_RXEN_PIN
+#define LORA_RXEN_PIN -1
+#endif
+
 // ============================================================================
 // GLOBALS
 // ============================================================================
@@ -43,6 +53,24 @@ uint32_t packetCount = 0;
 uint32_t lastTxTime = 0;
 bool txInProgress = false;
 uint32_t txStartTime = 0; // when current TX began
+
+// ============================================================================
+// RF SWITCH CONTROL (optional)
+// ============================================================================
+void rfSwitchInit() {
+    if (LORA_TXEN_PIN >= 0) pinMode(LORA_TXEN_PIN, OUTPUT);
+    if (LORA_RXEN_PIN >= 0) pinMode(LORA_RXEN_PIN, OUTPUT);
+}
+
+void rfSwitchToRx() {
+    if (LORA_TXEN_PIN >= 0) digitalWrite(LORA_TXEN_PIN, LOW);
+    if (LORA_RXEN_PIN >= 0) digitalWrite(LORA_RXEN_PIN, HIGH);
+}
+
+void rfSwitchToTx() {
+    if (LORA_RXEN_PIN >= 0) digitalWrite(LORA_RXEN_PIN, LOW);
+    if (LORA_TXEN_PIN >= 0) digitalWrite(LORA_TXEN_PIN, HIGH);
+}
 
 // ============================================================================
 // LORA CALLBACKS
@@ -116,6 +144,10 @@ void initLoRa() {
     Radio.SetChannel(LORA_FREQUENCY);
     Serial.printf("✅ Frequency: %d Hz\n", LORA_FREQUENCY);
     
+    // Initialize optional RF switch and default to RX path
+    rfSwitchInit();
+    rfSwitchToRx();
+
     loraInitialized = true;
     
     Serial.println("\n📡 LoRa Configuration Summary:");
@@ -162,6 +194,9 @@ void transmitTestMessage() {
     Serial.printf("Length:  %d bytes\n", len);
     Serial.println("Transmitting...");
     
+    // Drive RF switch to TX if required by board
+    rfSwitchToTx();
+
     txInProgress = true;
     txStartTime = millis();
     Radio.Send(txBuffer, len);
@@ -219,6 +254,8 @@ void loop() {
             Serial.println("❌ TX did not complete within expected window. Forcing standby and clearing flag.");
             Radio.Standby();
             txInProgress = false;
+            // Return RF switch to RX path so the gateway could hear subsequent packets
+            rfSwitchToRx();
         }
     }
     
