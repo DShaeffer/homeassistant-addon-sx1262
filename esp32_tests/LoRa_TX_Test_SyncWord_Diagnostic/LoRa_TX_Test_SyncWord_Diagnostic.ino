@@ -30,6 +30,7 @@ static RadioEvents_t RadioEvents;
 bool txInProgress = false;
 int currentTest = 0;
 uint32_t lastTxTime = 0;
+uint32_t txStartTime = 0;
 
 void OnTxDone(void) {
     Serial.println("✅ TX Done\n");
@@ -98,6 +99,7 @@ void transmitTest(uint8_t syncWord, int testNumber) {
     Serial.println("Transmitting...");
     
     txInProgress = true;
+    txStartTime = millis();
     Radio.Send(txBuffer, len);
     
     // Wait a bit for transmission to start
@@ -134,6 +136,19 @@ void loop() {
     
     // CRITICAL: Process radio events to service callbacks
     Radio.IrqProcess();
+
+    // Monitor TX progress and recover if stuck
+    if (txInProgress) {
+        uint32_t elapsed = millis() - txStartTime;
+        if (elapsed > 500 && (elapsed % 500) < 15) {
+            Serial.printf("⏳ Waiting for TX complete... %lu ms (sync test)\n", elapsed);
+        }
+        if (elapsed > 3500) {
+            Serial.println("❌ TX stuck beyond timeout. Forcing standby (sync test).\n");
+            Radio.Standby();
+            txInProgress = false;
+        }
+    }
     
     if (!txInProgress && millis() - lastTxTime >= 10000) {
         testCycle++;

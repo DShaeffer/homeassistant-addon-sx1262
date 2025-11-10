@@ -42,6 +42,7 @@ static RadioEvents_t RadioEvents;
 uint32_t packetCount = 0;
 uint32_t lastTxTime = 0;
 bool txInProgress = false;
+uint32_t txStartTime = 0; // when current TX began
 
 // ============================================================================
 // LORA CALLBACKS
@@ -162,6 +163,7 @@ void transmitTestMessage() {
     Serial.println("Transmitting...");
     
     txInProgress = true;
+    txStartTime = millis();
     Radio.Send(txBuffer, len);
     
     // Wait a bit for transmission to start
@@ -206,6 +208,19 @@ void loop() {
     // CRITICAL: Process radio events
     // The Heltec library requires calling Radio.IrqProcess() to service callbacks
     Radio.IrqProcess();
+
+    // If TX seems stuck beyond 3500 ms (slightly > configured 3000 ms timeout), recover
+    if (txInProgress) {
+        uint32_t elapsed = millis() - txStartTime;
+        if (elapsed > 500 && (elapsed % 500) < 15) { // periodic status every ~500ms
+            Serial.printf("⏳ Waiting for TX complete... %lu ms\n", elapsed);
+        }
+        if (elapsed > 3500) {
+            Serial.println("❌ TX did not complete within expected window. Forcing standby and clearing flag.");
+            Radio.Standby();
+            txInProgress = false;
+        }
+    }
     
     // Transmit at regular intervals
     if (!txInProgress && millis() - lastTxTime >= TX_INTERVAL_MS) {
