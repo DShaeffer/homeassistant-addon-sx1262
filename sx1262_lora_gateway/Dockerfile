@@ -17,9 +17,8 @@ RUN pip3 install --no-cache-dir \
     spidev \
     paho-mqtt
 
-# Install SX126x library from GitHub
-RUN pip3 install --no-cache-dir \
-    git+https://github.com/waveshare/SX126x-LoRa-HAT.git
+# Copy LoRaRF library
+COPY LoRaRF /LoRaRF
 
 # Copy data
 COPY run.sh /

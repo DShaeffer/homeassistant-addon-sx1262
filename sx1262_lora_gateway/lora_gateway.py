@@ -11,7 +11,10 @@ import time
 import logging
 from datetime import datetime
 import paho.mqtt.client as mqtt
-from LoRa import *
+
+# Add LoRaRF to path
+sys.path.append('/LoRaRF')
+from LoRaRF import SX126x
 
 # Configuration from environment variables
 LORA_FREQ = float(os.getenv('LORA_FREQ', '915.0'))
@@ -140,13 +143,20 @@ def on_lora_receive(lora):
     global stats
     
     try:
-        if lora.receivedPacket():
+        # Check if packet is available
+        lora.request()
+        code = lora.wait()
+        
+        if code == lora.STATUS_RX_DONE:
             stats['messages_received'] += 1
             
             # Read payload
-            payload = ""
-            while lora.available():
-                payload += chr(lora.read())
+            message = []
+            while lora.available() > 0:
+                message.append(lora.read())
+            
+            # Convert to string
+            payload = bytes(message).decode('utf-8', errors='ignore')
             
             # Get RSSI and SNR
             rssi = lora.packetRssi()
@@ -165,6 +175,8 @@ def on_lora_receive(lora):
                 
     except Exception as e:
         logger.error(f"Error in LoRa receive handler: {e}")
+        import traceback
+        traceback.print_exc()
         stats['errors'] += 1
 
 def setup_mqtt():
@@ -198,22 +210,41 @@ def setup_lora():
     logger.info("Setting up SX1262 LoRa radio...")
     
     try:
-        # Waveshare SX1262 HAT pinout
-        # RESET: GPIO 18 (Pin 12)
-        # BUSY: GPIO 23 (Pin 16)
-        # DIO1: GPIO 24 (Pin 18)
-        # NSS/CS: CE0 (GPIO 8, Pin 24)
-        # SPI: /dev/spidev0.0
+        # Waveshare SX1262 HAT pinout for Raspberry Pi
+        busId = 0           # SPI bus 0
+        csId = 0            # SPI CS 0 (/dev/spidev0.0)
+        resetPin = 18       # GPIO 18 (Pin 12)
+        busyPin = 23        # GPIO 23 (Pin 16) 
+        irqPin = 24         # GPIO 24 (Pin 18 - DIO1)
+        txenPin = -1        # Not used
+        rxenPin = -1        # Not used
         
-        lora = LoRa()
+        lora = SX126x()
         
-        # Basic configuration
-        lora.setSyncWord(LORA_SW)
-        lora.setFrequency(int(LORA_FREQ * 1000000))  # Convert MHz to Hz
+        # Initialize the radio
+        if not lora.begin(busId, csId, resetPin, busyPin, irqPin, txenPin, rxenPin):
+            raise Exception("Failed to initialize SX1262 radio")
+        
+        # Configure for Raspberry Pi RF switch
+        lora.setDio2RfSwitch()
+        
+        # Set frequency (convert MHz to Hz)
+        lora.setFrequency(int(LORA_FREQ * 1000000))
+        
+        # Configure modulation parameters
         lora.setSpreadingFactor(LORA_SF)
-        lora.setSignalBandwidth(LORA_BW)
-        lora.setCodingRate4(LORA_CR)
-        lora.setTxPower(LORA_POWER, PA_OUTPUT_PA_BOOST_PIN)
+        lora.setBandwidth(LORA_BW)
+        lora.setCodeRate(LORA_CR)
+        
+        # Set sync word
+        lora.setSyncWord(LORA_SW)
+        
+        # Set TX power
+        lora.setTxPower(LORA_POWER, lora.TX_POWER_SX126X_HP)
+        
+        # Set to receive mode
+        lora.request()
+        lora.wait()
         
         logger.info(f"LoRa configured:")
         logger.info(f"  Frequency: {LORA_FREQ} MHz")
@@ -227,6 +258,8 @@ def setup_lora():
         
     except Exception as e:
         logger.error(f"Failed to initialize LoRa radio: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 def publish_statistics():
