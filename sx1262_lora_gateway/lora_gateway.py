@@ -14,6 +14,13 @@ import paho.mqtt.client as mqtt
 
 # Add LoRaRF to path
 sys.path.append('/LoRaRF')
+# Some GPIO libraries check for Raspberry Pi revision via /proc/device-tree.
+# When running inside Home Assistant add-on containers the device tree may not
+# be visible at import time. Set a reasonable default revision so the lgpio
+# / RPi.GPIO compatibility layer doesn't raise on import.
+os.environ.setdefault('RPI_LGPIO_REVISION', 'a020d3')
+
+# Import LoRaRF SX126x driver
 from LoRaRF import SX126x
 
 # Configuration from environment variables
