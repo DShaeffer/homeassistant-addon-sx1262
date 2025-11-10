@@ -151,6 +151,25 @@ def on_lora_receive(lora):
     global stats
     
     try:
+        # Check IRQ status for any activity
+        irq_status = lora.getIrqStatus()
+        
+        # Log any IRQ activity (for debugging)
+        if irq_status != 0:
+            logger.debug(f"IRQ Status: 0x{irq_status:04X}")
+            
+            # Check for specific IRQs
+            if irq_status & lora.IRQ_PREAMBLE_DETECTED:
+                logger.info("📡 Preamble detected!")
+            if irq_status & lora.IRQ_HEADER_VALID:
+                logger.info("📡 Valid header detected!")
+            if irq_status & lora.IRQ_HEADER_ERR:
+                logger.warning("⚠️  Header error!")
+            if irq_status & lora.IRQ_CRC_ERR:
+                logger.warning("⚠️  CRC error!")
+            if irq_status & lora.IRQ_TIMEOUT:
+                logger.debug("RX timeout (normal, waiting for packet)")
+        
         # Check status (non-blocking for continuous RX)
         status = lora.status()
         
@@ -169,7 +188,7 @@ def on_lora_receive(lora):
             rssi = lora.packetRssi()
             snr = lora.packetSnr()
             
-            logger.info(f"LoRa RX: {len(payload)} bytes, RSSI={rssi}dBm, SNR={snr}dB")
+            logger.info(f"✅ LoRa RX: {len(payload)} bytes, RSSI={rssi}dBm, SNR={snr}dB")
             logger.debug(f"Raw payload: {payload}")
             
             # Publish signal quality
