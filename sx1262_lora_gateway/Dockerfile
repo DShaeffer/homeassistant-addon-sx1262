@@ -5,7 +5,6 @@ FROM $BUILD_FROM
 RUN apk add --no-cache \
     python3 \
     py3-pip \
-    py3-paho-mqtt \
     gcc \
     python3-dev \
     musl-dev \
@@ -15,7 +14,8 @@ RUN apk add --no-cache \
 RUN pip3 install --no-cache-dir \
     pyLoRa \
     RPi.GPIO \
-    spidev
+    spidev \
+    paho-mqtt
 
 # Copy data
 COPY run.sh /
