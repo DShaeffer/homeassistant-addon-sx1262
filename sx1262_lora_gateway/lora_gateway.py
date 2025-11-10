@@ -233,18 +233,26 @@ def setup_lora():
         except:
             pass
         
-        # Waveshare SX1262 HAT pinout for Raspberry Pi
+        # Waveshare SX1262 HAT pinout for Raspberry Pi (based on user's configuration)
+        # CS: GPIO 8 (Pin 24) - SPI0 CE0
+        # BUSY: GPIO 20 (Pin 38)
+        # DIO1: GPIO 16 (Pin 36)
+        # RST: GPIO 18 (Pin 12)
+        # TXEN: GPIO 6 (Pin 31, DIO4)
         busId = 0           # SPI bus 0
-        csId = 0            # SPI CS 0 (/dev/spidev0.0)
-        resetPin = 18       # GPIO 18 (Pin 12)
-        busyPin = 23        # GPIO 23 (Pin 16) 
-        irqPin = 24         # GPIO 24 (Pin 18 - DIO1)
-        txenPin = -1        # Not used
+        csId = 0            # SPI CS 0 (/dev/spidev0.0) - GPIO 8
+        resetPin = 18       # GPIO 18 (Pin 12) - RST
+        busyPin = 20        # GPIO 20 (Pin 38) - BUSY
+        irqPin = 16         # GPIO 16 (Pin 36) - DIO1
+        txenPin = 6         # GPIO 6 (Pin 31) - TXEN/DIO4
         rxenPin = -1        # Not used
+        
+        logger.info(f"Pin configuration: RESET={resetPin}, BUSY={busyPin}, IRQ={irqPin}, TXEN={txenPin}")
         
         lora = SX126x()
         
         # Initialize the radio
+        logger.info("Calling lora.begin()...")
         if not lora.begin(busId, csId, resetPin, busyPin, irqPin, txenPin, rxenPin):
             raise Exception("Failed to initialize SX1262 radio")
         
