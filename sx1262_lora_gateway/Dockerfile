@@ -8,7 +8,8 @@ RUN apk add --no-cache \
     gcc \
     python3-dev \
     musl-dev \
-    linux-headers
+    linux-headers \
+    git
 
 # Install Python packages
 RUN pip3 install --no-cache-dir \
