@@ -1,5 +1,5 @@
 name: "SX1262 LoRa Gateway"
-version: "1.3.3"
+version: "1.3.4"
 slug: sx1262_lora_gateway
 description: "LoRa receiver for Waveshare SX1262 HAT - receives data from ESP32 water sensor bridge"
 arch:

@@ -308,9 +308,13 @@ def setup_lora():
         logger.info(f"Setting code rate to 4/{LORA_CR}...")
         lora.setCodeRate(LORA_CR)
         
-        # Set sync word
-        logger.info(f"Setting sync word to 0x{LORA_SW:02X} (decimal {LORA_SW})...")
-        lora.setSyncWord(LORA_SW)
+        # Set sync word - CRITICAL FIX
+        # The LoRaRF library expects 16-bit sync word (MSB+LSB)
+        # ESP32 Heltec Radio.SetSyncWord(0x34) sets BOTH bytes to 0x34 → 0x3434
+        # If we pass 0x34 to LoRaRF, it converts to 0x3444 (different!)
+        # So we must explicitly set 0x3434 to match ESP32
+        logger.info(f"Setting sync word to 0x3434 (ESP32 format: 0x34 in both bytes)...")
+        lora.setSyncWord(0x3434)  # Match ESP32: both MSB and LSB = 0x34
         
         # Set packet parameters to match ESP32 Heltec configuration
         logger.info("Setting packet parameters...")
@@ -335,7 +339,7 @@ def setup_lora():
         logger.info(f"  Spreading Factor: {LORA_SF}")
         logger.info(f"  Bandwidth: {LORA_BW} Hz")
         logger.info(f"  Coding Rate: 4/{LORA_CR}")
-        logger.info(f"  Sync Word: 0x{LORA_SW:02X}")
+        logger.info(f"  Sync Word: 0x3434 (ESP32 format)")
         logger.info(f"  Preamble Length: 8")
         logger.info(f"  Header Type: Explicit (variable length)")
         logger.info(f"  CRC: Enabled")
