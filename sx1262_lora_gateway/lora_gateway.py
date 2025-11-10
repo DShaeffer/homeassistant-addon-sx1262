@@ -270,8 +270,8 @@ def setup_lora():
         # Set sync word
         lora.setSyncWord(LORA_SW)
         
-        # Set TX power (SX1262 supports up to +22dBm with PA_CONFIG_HP)
-        lora.setTxPower(LORA_POWER, lora.TX_POWER_SX1262_HP)
+        # Set TX power (SX1262 supports up to +22dBm)
+        lora.setTxPower(LORA_POWER, lora.TX_POWER_SX1262)
         
         # Set to receive mode
         lora.request()
