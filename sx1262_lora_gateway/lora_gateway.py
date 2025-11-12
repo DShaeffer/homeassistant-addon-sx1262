@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 SX1262 LoRa Gateway for Home Assistant
-Receives data from ESP32 water sensor bridge and publishes to MQTT
+General-purpose LoRa receiver that forwards JSON payloads to MQTT
+Supports any ESP32/Arduino LoRa transmitter with SX126x radios
 """
 
 import os
@@ -40,7 +41,7 @@ MQTT_HOST = os.getenv('MQTT_HOST', 'core-mosquitto')
 MQTT_PORT = int(os.getenv('MQTT_PORT', '1883'))
 MQTT_USER = os.getenv('MQTT_USER', '')
 MQTT_PASS = os.getenv('MQTT_PASS', '')
-MQTT_PREFIX = os.getenv('MQTT_PREFIX', 'lora/water_sensor')
+MQTT_PREFIX = os.getenv('MQTT_PREFIX', 'lora/gateway')
 
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'info').upper()
 
@@ -103,40 +104,44 @@ def publish_to_mqtt(topic, payload, retain=False):
         stats['errors'] += 1
         return False
 
-def parse_and_publish_sensor_data(payload):
-    """Parse JSON sensor data and publish to individual MQTT topics"""
+def parse_and_publish_data(payload):
+    """Parse JSON data and publish to MQTT topics"""
     try:
         data = json.loads(payload)
         stats['messages_parsed'] += 1
         
         logger.debug(f"Parsed data: {json.dumps(data, indent=2)}")
         
-        # Publish complete JSON
+        # Publish complete JSON payload to /data topic
         publish_to_mqtt(f"{MQTT_PREFIX}/data", payload)
         
-        # Publish individual sensor values for easy Home Assistant integration
-        if 'water' in data:
-            water = data['water']
-            publish_to_mqtt(f"{MQTT_PREFIX}/water/level", str(water.get('level_cm', 0)))
-            publish_to_mqtt(f"{MQTT_PREFIX}/water/percent", str(water.get('percent', 0)))
-            publish_to_mqtt(f"{MQTT_PREFIX}/water/raw_distance", str(water.get('raw_distance', 0)))
-            publish_to_mqtt(f"{MQTT_PREFIX}/water/state", str(water.get('state', 0)))
+        # Recursively publish all nested JSON fields as individual topics
+        # This allows Home Assistant to easily create sensors for any field
+        def publish_nested(obj, path=""):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    new_path = f"{path}/{key}" if path else key
+                    if isinstance(value, (dict, list)):
+                        publish_nested(value, new_path)
+                    else:
+                        # Leaf node - publish individual value
+                        publish_to_mqtt(f"{MQTT_PREFIX}/{new_path}", str(value))
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    new_path = f"{path}/{i}"
+                    if isinstance(item, (dict, list)):
+                        publish_nested(item, new_path)
+                    else:
+                        publish_to_mqtt(f"{MQTT_PREFIX}/{new_path}", str(item))
         
-        if 'battery' in data:
-            battery = data['battery']
-            publish_to_mqtt(f"{MQTT_PREFIX}/battery/voltage", str(battery.get('voltage', 0)))
-            publish_to_mqtt(f"{MQTT_PREFIX}/battery/unit", str(battery.get('unit', 0)))
-        
-        if 'status' in data:
-            status = data['status']
-            publish_to_mqtt(f"{MQTT_PREFIX}/status/wifi", str(status.get('wifi', 0)))
-            publish_to_mqtt(f"{MQTT_PREFIX}/status/updates", str(status.get('updates', 0)))
+        publish_nested(data)
         
         # Publish timestamp
         publish_to_mqtt(f"{MQTT_PREFIX}/last_seen", datetime.now().isoformat())
         
-        logger.info(f"Published sensor data: Level={data.get('water', {}).get('level_cm', 'N/A')}cm, "
-                   f"Battery={data.get('battery', {}).get('voltage', 'N/A')}V")
+        # Log a summary (show first few keys)
+        summary_keys = list(data.keys())[:5]
+        logger.info(f"Published data with keys: {summary_keys}")
         
         return True
         
@@ -146,7 +151,7 @@ def parse_and_publish_sensor_data(payload):
         stats['errors'] += 1
         return False
     except Exception as e:
-        logger.error(f"Error parsing sensor data: {e}")
+        logger.error(f"Error parsing data: {e}")
         stats['errors'] += 1
         return False
 
@@ -209,9 +214,9 @@ def on_lora_receive(lora):
                 publish_to_mqtt(f"{MQTT_PREFIX}/rssi", str(rssi))
                 publish_to_mqtt(f"{MQTT_PREFIX}/snr", str(snr))
                 
-                # Parse and publish sensor data
+                # Parse and publish data
                 if payload.strip():
-                    parse_and_publish_sensor_data(payload.strip())
+                    parse_and_publish_data(payload.strip())
         except Exception as e:
             logger.error(f"Error checking status: {e}")
                 

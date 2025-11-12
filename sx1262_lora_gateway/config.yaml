@@ -1,7 +1,7 @@
 name: "SX1262 LoRa Gateway"
-version: "1.4.1"
+version: "1.0.0"
 slug: sx1262_lora_gateway
-description: "LoRa receiver for Waveshare SX1262 HAT - receives data from ESP32 water sensor bridge"
+description: "General-purpose LoRa to MQTT gateway for Waveshare SX1262 HAT - works with any ESP32/Arduino SX126x transmitter"
 arch:
   - armhf
   - armv7
@@ -37,8 +37,8 @@ options:
   mqtt_port: 1883
   mqtt_username: ""
   mqtt_password: ""
-  mqtt_topic_prefix: "lora/water_sensor"
-  log_level: "debug"
+  mqtt_topic_prefix: "lora/gateway"
+  log_level: "info"
 schema:
   lora_frequency: float(902.0,928.0)
   lora_spreading_factor: int(6,12)
