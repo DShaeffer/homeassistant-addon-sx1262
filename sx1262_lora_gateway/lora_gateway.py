@@ -193,9 +193,14 @@ def on_lora_receive(lora):
                 # Convert to string
                 payload = bytes(message).decode('utf-8', errors='ignore')
                 
-                # Get RSSI and SNR
+                # Get RSSI and SNR (driver exposes packetRssi() and snr())
                 rssi = lora.packetRssi()
-                snr = lora.packetSnr()
+                try:
+                    snr = lora.snr()
+                except AttributeError:
+                    # Older naming fallback
+                    snr = 0.0
+                    logger.warning("SNR method unavailable; defaulting to 0.0")
                 
                 logger.info(f"✅ LoRa RX: {len(payload)} bytes, RSSI={rssi}dBm, SNR={snr}dB")
                 logger.debug(f"Raw payload: {payload}")
