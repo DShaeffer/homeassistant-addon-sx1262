@@ -61,8 +61,7 @@ uint32_t license[4] = {0x3521755D, 0xB0401FFE, 0xA7307FF6, 0xDDFE8E4E};
 // The ME201W solar panel with 18650 batteries can only sustain this if ESP32 sleeps most of the time.
 // NOTE: ME201W wakes every ~45 seconds to transmit data
 // Strategy: Wake frequently but wait up to 60 seconds to catch the transmission wherever it occurs
-// TEMPORARILY DISABLED FOR TESTING - Fix crash issue first!
-#define DEEP_SLEEP_ENABLED false         // Enable deep sleep (set false for debugging ONLY)
+#define DEEP_SLEEP_ENABLED true          // Enable deep sleep for battery operation
 #define SLEEP_INTERVAL_SECONDS 30        // Wake every 30 seconds (adjust as needed: 15-60s)
 #define SENSOR_READ_TIMEOUT_MS 60000     // Wait up to 60 seconds for sensor data (ensures we catch transmission)
 #define BUTTON_WAKE_ENABLED false        // Disable button wake to save power (no display polling)
@@ -927,6 +926,13 @@ void loop() {
                 Serial.println("💤 Data transmitted - going back to sleep");
                 delay(100);  // Brief delay to ensure serial output completes
                 enterDeepSleep();
+            } else if (!DEEP_SLEEP_ENABLED) {
+                // If deep sleep is disabled (testing mode), reset flags after transmission
+                // so we can transmit again when new sensor data arrives
+                Serial.println("🔄 Deep sleep disabled - will transmit on next sensor update");
+                delay(2000);  // Brief delay before allowing next transmission
+                sensorDataReceived = false;
+                sensorData.valid = false;  // Reset valid flag to wait for fresh data
             }
         }
     }
