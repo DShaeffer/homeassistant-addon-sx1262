@@ -26,6 +26,10 @@
  *   - ME201W 5V    → ESP32 5V pin (both powered by ME201W solar panel system)
  *   - ESP32 USB    → DISCONNECTED
  * 
+ * BEFORE UPLOADING:
+ *   Get your Heltec license from: https://resource.heltec.cn/search
+ *   Update the license[4] array below with your board-specific values
+ * 
  * Author: Hillsville Cabin Project
  * Date: November 2025
  */
@@ -41,6 +45,13 @@
 #include <Preferences.h>
 #include "LoRaWan_APP.h"      // Provides Vext power control and board initialization
 #include <ArduinoJson.h>      // For JSON creation
+
+// ============================================================================
+// HELTEC LICENSE - REQUIRED FOR V3 BOARDS
+// ============================================================================
+// Get your license from: https://resource.heltec.cn/search
+// Enter your chip ID and it will generate these 4 values
+uint32_t license[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
 
 // ============================================================================
 // CONFIGURATION
@@ -603,6 +614,13 @@ void initLoRa() {
     if (loraInitialized) return;
     
     Serial.println("\n📡 Initializing LoRa (SX1262)...");
+    
+    // CRITICAL: Set license BEFORE Mcu.begin() for Heltec V3 boards
+    Serial.println("Setting Heltec license...");
+    Mcu.setlicense(license, HELTEC_BOARD);
+    
+    Serial.println("Initializing MCU...");
+    Mcu.begin(HELTEC_BOARD, SLOW_CLK_TPYE);
     
     // Set up callbacks
     RadioEvents.TxDone = OnTxDone;
