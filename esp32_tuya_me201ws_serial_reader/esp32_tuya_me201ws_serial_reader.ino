@@ -51,8 +51,7 @@
 // ============================================================================
 // Get your license from: https://resource.heltec.cn/search
 // Enter your chip ID and it will generate these 4 values
-uint32_t license[4] = {0x00000000, 0x00000000, 0x00000000, 0x00000000};
-
+uint32_t license[4] = {0x3521755D, 0xB0401FFE, 0xA7307FF6, 0xDDFE8E4E};
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
@@ -544,39 +543,37 @@ void readSensorSerial() {
 String createJSON() {
     StaticJsonDocument<512> doc;
     
-    doc["device"] = "ME201W";
-    doc["timestamp"] = millis();
-    doc["uptime_s"] = sensorData.powerTime_s;
+    doc["dev"] = "ME201W";
+    doc["ts"] = millis();
+    doc["up"] = sensorData.powerTime_s;
     
     // Water data - use S_Level (computed actual height)
     JsonObject water = doc.createNestedObject("water");
-    water["level_cm"] = sensorData.sensorLevel_cm;          // Actual liquid height (Inst_H - R_L)
-    water["percent"] = sensorData.sensorPercent;            // % full based on thresholds
-    water["raw_distance"] = round(sensorData.rawDistance_cm * 10) / 10.0;  // Sensor to surface
-    water["install_height"] = sensorData.instHeight_cm;     // Sensor to bottom
-    water["state"] = sensorData.sensorState;                // 0=normal, 1=low, 2=high
+    water["lvl"] = sensorData.sensorLevel_cm;              // Actual liquid height (Inst_H - R_L)
+    water["pct"] = sensorData.sensorPercent;               // % full based on thresholds
+    water["raw"] = round(sensorData.rawDistance_cm * 10) / 10.0;  // Sensor to surface
+    water["inst"] = sensorData.instHeight_cm;              // Sensor to bottom
+    water["st"] = sensorData.sensorState;                  // 0=normal, 1=low, 2=high
     
     // Thresholds
-    JsonObject thresholds = doc.createNestedObject("thresholds");
-    thresholds["max"] = sensorData.maxThreshold;
-    thresholds["min"] = sensorData.minThreshold;
+    JsonObject thr = doc.createNestedObject("thr");
+    thr["max"] = sensorData.maxThreshold;
+    thr["min"] = sensorData.minThreshold;
     
     // Battery
-    JsonObject battery = doc.createNestedObject("battery");
-    battery["voltage"] = round(sensorData.batteryVoltage * 100) / 100.0;
-    battery["unit"] = sensorData.batteryUnit;               // 0-100 scale
+    JsonObject batt = doc.createNestedObject("batt");
+    batt["v"] = round(sensorData.batteryVoltage * 100) / 100.0;
+    batt["u"] = sensorData.batteryUnit;                    // 0-100 scale
     
     // Environment
     if (sensorData.temperature != 0) {
-        doc["temperature"] = round(sensorData.temperature * 10) / 10.0;
+        doc["temp"] = round(sensorData.temperature * 10) / 10.0;
     }
     
-    // Status
-    JsonObject status = doc.createNestedObject("status");
-    status["wifi"] = sensorData.wifiState;
-    status["low_power"] = sensorData.lowPowerMode;
-    status["updates"] = sensorData.updateCount;
-    status["reboots"] = sensorData.rebootCount;
+    // Status (minimal - only include what's needed)
+    JsonObject stat = doc.createNestedObject("stat");
+    stat["wifi"] = sensorData.wifiState;
+    stat["lp"] = sensorData.lowPowerMode;
     
     String output;
     serializeJson(doc, output);
@@ -686,7 +683,10 @@ void transmitLoRa() {
     // Send packet
     uint8_t txBuffer[256];
     int len = json.length();
-    if (len > 255) len = 255;  // Limit packet size
+    if (len > 255) {
+        Serial.printf("⚠️  WARNING: Payload too large (%d bytes), truncating to 255\n", len);
+        len = 255;  // SX1262 max payload is 256, but we use 255 to be safe
+    }
     
     json.getBytes(txBuffer, len + 1);
     
