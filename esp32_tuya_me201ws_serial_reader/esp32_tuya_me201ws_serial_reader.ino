@@ -742,6 +742,7 @@ void enterDeepSleep() {
     
     // CRITICAL: Put radio to sleep BEFORE ending SPI (avoids LoadProhibited crash)
     Radio.Sleep();
+    loraInitialized = false;  // Force full radio re-init on next wake
     
     // CRITICAL FOR V3: End all peripheral interfaces
     // Set radio pins to ANALOG to reduce power leakage in deep sleep
