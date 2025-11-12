@@ -62,15 +62,15 @@ uint32_t license[4] = {0x3521755D, 0xB0401FFE, 0xA7307FF6, 0xDDFE8E4E};
 // NOTE: ME201W wakes every ~45 seconds to transmit data
 // Strategy: Wake on UART activity (most power efficient!) or timer as backup
 #define DEEP_SLEEP_ENABLED true          // Enable deep sleep for battery operation
-#define UART_WAKE_ENABLED true           // Wake on serial data from ME201W (ESP32-S3 feature)
-#define SLEEP_INTERVAL_SECONDS 60        // Timer wake as backup if UART wake fails
+#define UART_WAKE_ENABLED true           // Attempt wake on serial start bit (requires RTC IO pin & EXT0)
+#define SLEEP_INTERVAL_SECONDS 0         // 0 = no timer wake; only wake on serial activity
 #define SENSOR_READ_TIMEOUT_MS 10000     // Read for 10 seconds after wake (sensor transmits for ~5s)
 #define BUTTON_WAKE_ENABLED false        // Disable button wake to save power (no display polling)
 
 // Serial connection to ME201W sensor
-// NOTE: Do NOT use GPIO 44 (physical pin 5) - it's the USB UART!
-// Use GPIO 48 instead (available GPIO, not connected to USB)
-#define SENSOR_SERIAL_RX 48       // ESP32-S3 GPIO 48 (or try GPIO 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+// IMPORTANT: For deep sleep wake on serial, RX must be an RTC IO capable pin.
+// Rewire ME201W TX to GPIO 5 (RTC IO). Idle HIGH, start bit drives LOW -> EXT0 wake.
+#define SENSOR_SERIAL_RX 5        // Using GPIO5 to allow EXT0 deep sleep wake on start bit
 #define SENSOR_SERIAL_TX -1       // TX not needed (read-only), use -1
 #define SENSOR_BAUD_RATE 115200
 
@@ -211,7 +211,7 @@ void showBootScreen() {
     if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
         reason = "Timer Wake";
     } else if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
-        reason = "Button Wake";
+        reason = "Serial Wake";
     }
     oled.drawString(64, 50, reason);
     oled.display();
@@ -707,13 +707,21 @@ void transmitLoRa() {
 void enterDeepSleep() {
     Serial.println("\n💤 ========================================");
     Serial.println("💤 Entering Deep Sleep");
-    Serial.printf("💤 Sleep Duration: %d seconds (timer backup)\n", SLEEP_INTERVAL_SECONDS);
+    if (SLEEP_INTERVAL_SECONDS > 0) {
+        Serial.printf("💤 Sleep Duration: %d seconds (timer backup)\n", SLEEP_INTERVAL_SECONDS);
+    } else {
+        Serial.println("💤 Sleep Duration: until serial activity (no timer backup)");
+    }
     
     if (UART_WAKE_ENABLED) {
-        Serial.println("💤 UART Wake: ENABLED - will wake on serial data");
-        Serial.printf("💤 Wake sources: UART (GPIO %d) or Timer (%ds)\n", SENSOR_SERIAL_RX, SLEEP_INTERVAL_SECONDS);
-    } else {
-        Serial.printf("💤 Wake sources: Timer (%ds) or Button press\n", SLEEP_INTERVAL_SECONDS);
+        if (SLEEP_INTERVAL_SECONDS > 0) {
+            Serial.println("💤 Serial Wake: ENABLED (EXT0 on start bit LOW)");
+            Serial.printf("💤 Wake sources: Serial RX (GPIO %d LOW) or Timer (%ds)\n", SENSOR_SERIAL_RX, SLEEP_INTERVAL_SECONDS);
+        } else {
+            Serial.println("💤 Wake sources: Serial RX only (EXT0 on start bit LOW)");
+        }
+    } else if (SLEEP_INTERVAL_SECONDS > 0) {
+        Serial.printf("💤 Wake sources: Timer (%ds) only\n", SLEEP_INTERVAL_SECONDS);
     }
     
     Serial.println("💤 ========================================\n");
@@ -740,19 +748,14 @@ void enterDeepSleep() {
     delay(100);
     
     // Configure wake sources
-    uint64_t sleepTime = SLEEP_INTERVAL_SECONDS * 1000000ULL; // Convert to microseconds
-    esp_sleep_enable_timer_wakeup(sleepTime);
+    if (SLEEP_INTERVAL_SECONDS > 0) {
+        uint64_t sleepTime = SLEEP_INTERVAL_SECONDS * 1000000ULL; // Convert to microseconds
+        esp_sleep_enable_timer_wakeup(sleepTime);
+    }
     
-    // UART wake on ESP32-S3 (wake when ME201W starts transmitting!)
+    // EXT0 wake on RX LOW (UART start bit). Pin must be RTC IO; using GPIO5.
     if (UART_WAKE_ENABLED) {
-        // Configure UART1 (our sensor serial) to wake on RX activity
-        // This is MUCH more power efficient than timer-based polling!
-        // Threshold: number of edges on RX pin to trigger wake (lower = more sensitive)
-        // Setting to 3 edges means wake on ~1-2 bytes of data
-        esp_sleep_enable_uart_wakeup(1);  // UART number (we use UART1 for sensor)
-        
-        // Note: ESP32-S3 supports UART wake, but we still keep timer as backup
-        // in case UART wake doesn't trigger (e.g., if ME201W stops transmitting)
+        esp_sleep_enable_ext0_wakeup((gpio_num_t)SENSOR_SERIAL_RX, 0); // Wake when line goes LOW
     }
     
     if (BUTTON_WAKE_ENABLED) {
@@ -774,12 +777,9 @@ void checkWakeReason() {
     
     switch(wakeup_reason) {
         case ESP_SLEEP_WAKEUP_EXT0:
-            Serial.println("🌅 Wake Reason: BUTTON PRESS");
-            buttonWakeCount++;
-            displayActive = true;  // Activate display on button wake
-            displayActivatedTime = millis();
-            displayPage = 0;
-            lastPageChange = millis();
+            Serial.println("🌅 Wake Reason: SERIAL (start bit)\n");
+            uartWakeCount++;  // Treat EXT0 as serial wake
+            displayActive = false;  // Keep display off for serial wake
             break;
             
         case ESP_SLEEP_WAKEUP_TIMER:
@@ -909,8 +909,10 @@ void setup() {
     Serial.printf("⏰ Sensor read timeout: %d seconds\n", SENSOR_READ_TIMEOUT_MS / 1000);
     
     if (UART_WAKE_ENABLED) {
-        Serial.println("💤 Power Mode: UART Wake (wakes when ME201W transmits)");
+        Serial.println("💤 Power Mode: Deep Sleep + EXT0 Serial Wake");
+        Serial.printf("💤 RX pin: GPIO%d (idle HIGH, wake on LOW start bit)\n", SENSOR_SERIAL_RX);
         Serial.printf("💤 Backup timer: %d seconds\n", SLEEP_INTERVAL_SECONDS);
+        Serial.println("⚠️  First byte of transmission may be lost (wake latency) - sensor sends multiple lines so OK.");
     } else {
         Serial.printf("💤 Power Mode: Timer Wake every %d seconds\n", SLEEP_INTERVAL_SECONDS);
     }
