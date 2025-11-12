@@ -63,10 +63,10 @@ uint32_t license[4] = {0x3521755D, 0xB0401FFE, 0xA7307FF6, 0xDDFE8E4E};
 // NOTE: ME201W wakes every ~45 seconds to transmit data
 // Strategy: Wake on UART activity (most power efficient!) or timer as backup
 #define DEEP_SLEEP_ENABLED true          // Enable deep sleep for battery operation
-#define UART_WAKE_ENABLED true           // Attempt wake on serial start bit (requires RTC IO pin & EXT0)
+#define UART_WAKE_ENABLED true           // Attempt wake on serial start bit (requires RTC IO pin & EXT1)
 #define SLEEP_INTERVAL_SECONDS 0         // 0 = no timer wake; only wake on serial activity
 #define SENSOR_READ_TIMEOUT_MS 10000     // Read for 10 seconds after wake (sensor transmits for ~5s)
-#define BUTTON_WAKE_ENABLED false        // Disable button wake to save power (no display polling)
+#define BUTTON_WAKE_ENABLED true         // Enable button wake for display/debugging
 
 // Serial connection to ME201W sensor
 // IMPORTANT: For deep sleep wake on serial, RX must be an RTC IO capable pin.
@@ -817,6 +817,9 @@ void checkWakeReason() {
             uint64_t mask = (1ULL << SENSOR_SERIAL_RX);
             esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ALL_LOW);
         }
+        if (BUTTON_WAKE_ENABLED) {
+            esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
+        }
         if (SLEEP_INTERVAL_SECONDS > 0) {
             esp_sleep_enable_timer_wakeup(SLEEP_INTERVAL_SECONDS * 1000000ULL);
         }
@@ -831,9 +834,15 @@ void checkWakeReason() {
     
     switch(wakeup_reason) {
         case ESP_SLEEP_WAKEUP_EXT0:
+            Serial.println("🌅 Wake Reason: BUTTON PRESS");
+            buttonWakeCount++;
+            displayActive = true;  // Show display on button wake
+            displayActivatedTime = millis();
+            break;
+            
         case ESP_SLEEP_WAKEUP_EXT1:
             Serial.println("🌅 Wake Reason: SERIAL (start bit)\n");
-            uartWakeCount++;  // Treat EXT0/EXT1 as serial wake
+            uartWakeCount++;  // EXT1 is serial wake
             displayActive = false;  // Keep display off for serial wake
             break;
             
