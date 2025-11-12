@@ -733,11 +733,7 @@ void enterDeepSleep() {
     preferences.putUInt("tmrWake", timerWakeCount);
     preferences.putUInt("uartWake", uartWakeCount);
     
-    // Cleanly shut down peripherals to avoid deep sleep crash
-    
-    // End serial connections to release UART peripheral
-    sensorSerial.end();
-    Serial.flush();
+    // Cleanly shut down peripherals to avoid deep sleep crash (V3 board requirements)
     
     // Turn off display
     oled.clear();
@@ -747,10 +743,8 @@ void enterDeepSleep() {
     // CRITICAL: Put radio to sleep BEFORE ending SPI (avoids LoadProhibited crash)
     Radio.Sleep();
     
-    // End SPI to release radio peripheral
-    SPI.end();
-    
-    // Optional: Set radio pins to ANALOG to reduce power leakage in deep sleep
+    // CRITICAL FOR V3: End all peripheral interfaces
+    // Set radio pins to ANALOG to reduce power leakage in deep sleep
     pinMode(RADIO_DIO_1, ANALOG);
     pinMode(RADIO_NSS, ANALOG);
     pinMode(RADIO_RESET, ANALOG);
@@ -758,6 +752,15 @@ void enterDeepSleep() {
     pinMode(LORA_CLK, ANALOG);
     pinMode(LORA_MISO, ANALOG);
     pinMode(LORA_MOSI, ANALOG);
+    
+    // CRITICAL: Detach interrupt handler (required for V3 stability)
+    detachInterrupt(BUTTON_PIN);
+    
+    // CRITICAL: End all communication peripherals (required for V3)
+    Wire.end();          // I2C for OLED
+    sensorSerial.end();  // UART1 for sensor
+    Serial.end();        // UART0 for debug
+    SPI.end();           // SPI for radio
     
     // Give peripherals time to fully shut down
     delay(100);
