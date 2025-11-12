@@ -2,6 +2,11 @@
 
 All notable changes to this add-on will be documented in this file.
 
+## [1.4.1] - 2025-11-11
+
+### Fixed
+- Replace nonexistent `packetSnr()` call with `snr()` and add safe fallback.
+
 ## [1.4.0] - 2025-11-11
 
 ### Added
