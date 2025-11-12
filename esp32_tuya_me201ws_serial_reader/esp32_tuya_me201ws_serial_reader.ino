@@ -60,10 +60,11 @@ uint32_t license[4] = {0x3521755D, 0xB0401FFE, 0xA7307FF6, 0xDDFE8E4E};
 // IMPORTANT: For solar/battery operation, keep DEEP_SLEEP_ENABLED true!
 // The ME201W solar panel with 18650 batteries can only sustain this if ESP32 sleeps most of the time.
 // NOTE: ME201W wakes every ~45 seconds to transmit data
-// Strategy: Wake frequently but wait up to 60 seconds to catch the transmission wherever it occurs
+// Strategy: Wake on UART activity (most power efficient!) or timer as backup
 #define DEEP_SLEEP_ENABLED true          // Enable deep sleep for battery operation
-#define SLEEP_INTERVAL_SECONDS 30        // Wake every 30 seconds (adjust as needed: 15-60s)
-#define SENSOR_READ_TIMEOUT_MS 60000     // Wait up to 60 seconds for sensor data (ensures we catch transmission)
+#define UART_WAKE_ENABLED true           // Wake on serial data from ME201W (ESP32-S3 feature)
+#define SLEEP_INTERVAL_SECONDS 60        // Timer wake as backup if UART wake fails
+#define SENSOR_READ_TIMEOUT_MS 10000     // Read for 10 seconds after wake (sensor transmits for ~5s)
 #define BUTTON_WAKE_ENABLED false        // Disable button wake to save power (no display polling)
 
 // Serial connection to ME201W sensor
@@ -166,6 +167,7 @@ RTC_DATA_ATTR uint32_t bootCount = 0;
 RTC_DATA_ATTR uint32_t totalTransmissions = 0;
 RTC_DATA_ATTR uint32_t buttonWakeCount = 0;
 RTC_DATA_ATTR uint32_t timerWakeCount = 0;
+RTC_DATA_ATTR uint32_t uartWakeCount = 0;
 
 // Sleep state
 bool readyForSleep = false;
@@ -296,10 +298,10 @@ void showStatsPage() {
     String txStr = "TX: " + String(totalTransmissions);
     oled.drawString(0, 24, txStr);
     
-    String wakeStr = "Wake: T" + String(timerWakeCount) + " B" + String(buttonWakeCount);
+    String wakeStr = "Wake: U" + String(uartWakeCount) + " T" + String(timerWakeCount);
     oled.drawString(0, 36, wakeStr);
     
-    String sleepStr = "Sleep: " + String(SLEEP_INTERVAL_SECONDS) + "s";
+    String sleepStr = UART_WAKE_ENABLED ? "UART Wake: ON" : "Timer: " + String(SLEEP_INTERVAL_SECONDS) + "s";
     oled.drawString(0, 48, sleepStr);
     
     oled.display();
@@ -705,8 +707,15 @@ void transmitLoRa() {
 void enterDeepSleep() {
     Serial.println("\n💤 ========================================");
     Serial.println("💤 Entering Deep Sleep");
-    Serial.printf("💤 Sleep Duration: %d seconds\n", SLEEP_INTERVAL_SECONDS);
-    Serial.printf("💤 Next wake: Timer (%ds) or Button press\n", SLEEP_INTERVAL_SECONDS);
+    Serial.printf("💤 Sleep Duration: %d seconds (timer backup)\n", SLEEP_INTERVAL_SECONDS);
+    
+    if (UART_WAKE_ENABLED) {
+        Serial.println("💤 UART Wake: ENABLED - will wake on serial data");
+        Serial.printf("💤 Wake sources: UART (GPIO %d) or Timer (%ds)\n", SENSOR_SERIAL_RX, SLEEP_INTERVAL_SECONDS);
+    } else {
+        Serial.printf("💤 Wake sources: Timer (%ds) or Button press\n", SLEEP_INTERVAL_SECONDS);
+    }
+    
     Serial.println("💤 ========================================\n");
     
     // Save data to preferences
@@ -714,6 +723,7 @@ void enterDeepSleep() {
     preferences.putUInt("totalTx", totalTransmissions);
     preferences.putUInt("btnWake", buttonWakeCount);
     preferences.putUInt("tmrWake", timerWakeCount);
+    preferences.putUInt("uartWake", uartWakeCount);
     
     // Put radio to sleep - COMMENTED OUT - Causes LoadProhibited crash
     // if (loraInitialized) {
@@ -732,6 +742,18 @@ void enterDeepSleep() {
     // Configure wake sources
     uint64_t sleepTime = SLEEP_INTERVAL_SECONDS * 1000000ULL; // Convert to microseconds
     esp_sleep_enable_timer_wakeup(sleepTime);
+    
+    // UART wake on ESP32-S3 (wake when ME201W starts transmitting!)
+    if (UART_WAKE_ENABLED) {
+        // Configure UART1 (our sensor serial) to wake on RX activity
+        // This is MUCH more power efficient than timer-based polling!
+        // Threshold: number of edges on RX pin to trigger wake (lower = more sensitive)
+        // Setting to 3 edges means wake on ~1-2 bytes of data
+        esp_sleep_enable_uart_wakeup(1);  // UART number (we use UART1 for sensor)
+        
+        // Note: ESP32-S3 supports UART wake, but we still keep timer as backup
+        // in case UART wake doesn't trigger (e.g., if ME201W stops transmitting)
+    }
     
     if (BUTTON_WAKE_ENABLED) {
         // Configure button (GPIO 0) as wake source (active LOW)
@@ -761,9 +783,15 @@ void checkWakeReason() {
             break;
             
         case ESP_SLEEP_WAKEUP_TIMER:
-            Serial.println("🌅 Wake Reason: TIMER");
+            Serial.println("🌅 Wake Reason: TIMER (backup)");
             timerWakeCount++;
             displayActive = false;  // Keep display off for timer wake
+            break;
+            
+        case ESP_SLEEP_WAKEUP_UART:
+            Serial.println("🌅 Wake Reason: UART - Sensor transmitting!");
+            uartWakeCount++;
+            displayActive = false;  // Keep display off for UART wake
             break;
             
         case ESP_SLEEP_WAKEUP_UNDEFINED:
@@ -774,7 +802,7 @@ void checkWakeReason() {
             break;
     }
     
-    Serial.printf("🌅 Total: Timer=%d, Button=%d\n", timerWakeCount, buttonWakeCount);
+    Serial.printf("🌅 Total: UART=%d, Timer=%d, Button=%d\n", uartWakeCount, timerWakeCount, buttonWakeCount);
     Serial.println("🌅 ========================================\n");
 }
 
@@ -847,6 +875,7 @@ void setup() {
         totalTransmissions = preferences.getUInt("totalTx", 0);
         buttonWakeCount = preferences.getUInt("btnWake", 0);
         timerWakeCount = preferences.getUInt("tmrWake", 0);
+        uartWakeCount = preferences.getUInt("uartWake", 0);
     }
     
     // Check why we woke up
@@ -878,7 +907,13 @@ void setup() {
     sensorDataReceived = false;
     
     Serial.printf("⏰ Sensor read timeout: %d seconds\n", SENSOR_READ_TIMEOUT_MS / 1000);
-    Serial.printf("💤 Sleep interval: %d seconds (matches ME201W wake cycle)\n", SLEEP_INTERVAL_SECONDS);
+    
+    if (UART_WAKE_ENABLED) {
+        Serial.println("💤 Power Mode: UART Wake (wakes when ME201W transmits)");
+        Serial.printf("💤 Backup timer: %d seconds\n", SLEEP_INTERVAL_SECONDS);
+    } else {
+        Serial.printf("💤 Power Mode: Timer Wake every %d seconds\n", SLEEP_INTERVAL_SECONDS);
+    }
     
     // Initialize LoRa if enabled
     if (ENABLE_LORA) {
@@ -908,12 +943,15 @@ void loop() {
     readSensorSerial();
     
     // Check if we got valid sensor data (valid flag is set when R_L is received)
-    // Note: We transmit even if level is 0 (empty tank is still valid data!)
+    // IMPROVED: Wait for multiple key fields to ensure complete data packet
     if (sensorData.valid && !sensorDataReceived) {
-        // Additional check: make sure we have at least battery voltage to confirm data is complete
-        if (sensorData.batteryVoltage > 0) {
+        // Check for complete data: battery voltage AND at least one level reading
+        bool hasComplete = (sensorData.batteryVoltage > 0) && 
+                          (sensorData.sensorLevel_cm > 0 || sensorData.rawDistance_cm > 0);
+        
+        if (hasComplete) {
             sensorDataReceived = true;
-            Serial.println("✅ Valid sensor data received!");
+            Serial.println("✅ Complete sensor data received!");
             Serial.printf("   Level: %d cm, Percent: %d%%, Battery: %.2fV\n",
                          sensorData.sensorLevel_cm, sensorData.sensorPercent, sensorData.batteryVoltage);
             
