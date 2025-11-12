@@ -753,8 +753,10 @@ void enterDeepSleep() {
     pinMode(LORA_MISO, ANALOG);
     pinMode(LORA_MOSI, ANALOG);
     
-    // CRITICAL: Detach interrupt handler (required for V3 stability)
-    detachInterrupt(BUTTON_PIN);
+    // CRITICAL: Detach interrupt handler only if it was attached (required for V3 stability)
+    if (displayActive) {
+        detachInterrupt(BUTTON_PIN);
+    }
     
     // CRITICAL: End all communication peripherals (required for V3)
     Wire.end();          // I2C for OLED
@@ -887,6 +889,13 @@ void setup() {
     digitalWrite(LED, LOW);
     
     pinMode(BUTTON_PIN, INPUT_PULLUP);
+    
+    // Only attach interrupt if we're showing the display (power-on boot)
+    // For UART wake, we skip button handling to avoid interrupt conflicts
+    if (displayActive) {
+        attachInterrupt(BUTTON_PIN, [](){}, FALLING);  // Dummy handler for now
+    }
+    
     preferences.begin("water-sensor", false);
     
     // Load persistent counters from RTC memory or preferences
