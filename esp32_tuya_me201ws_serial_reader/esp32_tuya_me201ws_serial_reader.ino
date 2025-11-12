@@ -182,7 +182,7 @@ static RadioEvents_t RadioEvents;
 // Fast path: reboot into deep sleep after TX to avoid peripheral teardown races
 #define REBOOT_BEFORE_SLEEP 1
 RTC_DATA_ATTR uint32_t rebootToSleepMagic = 0;
-#define REBOOT_TO_SLEEP_MAGIC 0xDEEP1EEP
+#define REBOOT_TO_SLEEP_MAGIC 0xDEED5EEDul
 
 // ============================================================================
 // VEXT POWER CONTROL (OLED)

@@ -25,6 +25,7 @@
 // LoRa constants
 static const uint8_t SYNC_WORDS[] = {0x34, 0x12, 0x44};
 static const uint8_t SPREADING_FACTORS[] = {7, 9, 12};
+
 static const uint8_t BANDWIDTHS[] = {0, 1}; // 0=125kHz,1=250kHz
 static const int8_t TX_POWERS[] = {14, 20};
 
