@@ -210,7 +210,7 @@ void showBootScreen() {
     String reason = "Power On";
     if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
         reason = "Timer Wake";
-    } else if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
+    } else if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0 || wakeup_reason == ESP_SLEEP_WAKEUP_EXT1) {
         reason = "Serial Wake";
     }
     oled.drawString(64, 50, reason);
@@ -753,9 +753,11 @@ void enterDeepSleep() {
         esp_sleep_enable_timer_wakeup(sleepTime);
     }
     
-    // EXT0 wake on RX LOW (UART start bit). Pin must be RTC IO; using GPIO5.
+    // Wake on RX LOW (UART start bit). Use EXT1 with ALL_LOW on a single pin to avoid EXT0 instability.
     if (UART_WAKE_ENABLED) {
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)SENSOR_SERIAL_RX, 0); // Wake when line goes LOW
+        uint64_t mask = (1ULL << SENSOR_SERIAL_RX);
+        // With a single pin in mask, ALL_LOW means wake when that pin goes LOW
+        esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ALL_LOW);
     }
     
     if (BUTTON_WAKE_ENABLED) {
@@ -777,8 +779,9 @@ void checkWakeReason() {
     
     switch(wakeup_reason) {
         case ESP_SLEEP_WAKEUP_EXT0:
+        case ESP_SLEEP_WAKEUP_EXT1:
             Serial.println("🌅 Wake Reason: SERIAL (start bit)\n");
-            uartWakeCount++;  // Treat EXT0 as serial wake
+            uartWakeCount++;  // Treat EXT0/EXT1 as serial wake
             displayActive = false;  // Keep display off for serial wake
             break;
             
