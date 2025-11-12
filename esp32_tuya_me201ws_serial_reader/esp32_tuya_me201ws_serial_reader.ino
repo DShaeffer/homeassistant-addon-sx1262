@@ -45,6 +45,7 @@
 #include <Preferences.h>
 #include "LoRaWan_APP.h"      // Provides Vext power control and board initialization
 #include <ArduinoJson.h>      // For JSON creation
+// Note: We'll use ESP.restart() (from Arduino core) to avoid including esp_system.h explicitly
 
 // ============================================================================
 // HELTEC LICENSE - REQUIRED FOR V3 BOARDS
@@ -177,6 +178,11 @@ uint32_t wakeTime = 0;
 // LoRa state
 bool loraInitialized = false;
 static RadioEvents_t RadioEvents;
+
+// Fast path: reboot into deep sleep after TX to avoid peripheral teardown races
+#define REBOOT_BEFORE_SLEEP 1
+RTC_DATA_ATTR uint32_t rebootToSleepMagic = 0;
+#define REBOOT_TO_SLEEP_MAGIC 0xDEEP1EEP
 
 // ============================================================================
 // VEXT POWER CONTROL (OLED)
@@ -697,6 +703,11 @@ void transmitLoRa() {
     // Wait for TX to complete (blocking)
     delay(100);  // Brief delay for transmission
     
+#if REBOOT_BEFORE_SLEEP
+    // Mark that after this TX we prefer a reboot to guarantee pristine hardware state before sleep
+    rebootToSleepMagic = REBOOT_TO_SLEEP_MAGIC;
+#endif
+    
     Serial.println("📡 ========================================\n");
 }
 
@@ -794,6 +805,26 @@ void checkWakeReason() {
     bootCount++;
     
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+    
+#if REBOOT_BEFORE_SLEEP
+    // If we purposely rebooted purely to enter deep sleep (crash mitigation path)
+    if (rebootToSleepMagic == REBOOT_TO_SLEEP_MAGIC) {
+        rebootToSleepMagic = 0; // clear
+        Serial.println("\n🌅 Reboot-to-sleep fast path engaged (clean peripheral baseline)");
+        // Skip normal initialization (we haven't started sensor UART yet) and enter sleep directly
+        // Configure wake sources just like enterDeepSleep() but with minimal teardown (nothing started)
+        if (UART_WAKE_ENABLED) {
+            uint64_t mask = (1ULL << SENSOR_SERIAL_RX);
+            esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ALL_LOW);
+        }
+        if (SLEEP_INTERVAL_SECONDS > 0) {
+            esp_sleep_enable_timer_wakeup(SLEEP_INTERVAL_SECONDS * 1000000ULL);
+        }
+        Serial.println("💤 Fast-path going to deep sleep immediately after reboot");
+        delay(50);
+        esp_deep_sleep_start();
+    }
+#endif
     
     Serial.println("\n🌅 ========================================");
     Serial.printf("🌅 Wake Event #%d\n", bootCount);
@@ -996,7 +1027,14 @@ void loop() {
             if (!displayActive && DEEP_SLEEP_ENABLED) {
                 Serial.println("💤 Data transmitted - going back to sleep");
                 delay(100);  // Brief delay to ensure serial output completes
+#if REBOOT_BEFORE_SLEEP
+                // Reboot to clean peripheral state, then fast-path into deep sleep
+                Serial.println("🔄 Rebooting to guarantee clean sleep entry...");
+                delay(50);
+                ESP.restart();
+#else
                 enterDeepSleep();
+#endif
             } else if (!DEEP_SLEEP_ENABLED) {
                 // If deep sleep is disabled (testing mode), reset flags after transmission
                 // so we can transmit again when new sensor data arrives
