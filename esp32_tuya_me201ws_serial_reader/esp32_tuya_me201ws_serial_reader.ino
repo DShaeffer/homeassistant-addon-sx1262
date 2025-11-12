@@ -733,19 +733,22 @@ void enterDeepSleep() {
     preferences.putUInt("tmrWake", timerWakeCount);
     preferences.putUInt("uartWake", uartWakeCount);
     
-    // Put radio to sleep - COMMENTED OUT - Causes LoadProhibited crash
-    // if (loraInitialized) {
-    //     Radio.Sleep();
-    // }
+    // Cleanly shut down peripherals to avoid deep sleep crash
+    
+    // End serial connections to release UART peripheral
+    sensorSerial.end();
+    Serial.flush();
     
     // Turn off display
     oled.clear();
     oled.display();
     VextOFF();
     
-    // Flush serial
-    Serial.flush();
-    delay(100);
+    // End SPI to release radio peripheral (avoids LoadProhibited on sleep entry)
+    SPI.end();
+    
+    // Give peripherals time to fully shut down
+    delay(200);
     
     // Configure wake sources
     if (SLEEP_INTERVAL_SECONDS > 0) {
