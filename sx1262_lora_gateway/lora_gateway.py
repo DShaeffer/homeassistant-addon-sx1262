@@ -29,7 +29,11 @@ LORA_SF = int(os.getenv('LORA_SF', '7'))
 LORA_BW = int(os.getenv('LORA_BW', '125000'))
 LORA_CR = int(os.getenv('LORA_CR', '5'))
 # Sync word: default 52 (decimal) = 0x34 (hex) = standard LoRa private network
-LORA_SW = int(os.getenv('LORA_SW', '52'))
+LORA_SW = int(os.getenv('LORA_SW', '52'))  # Single-byte legacy form (decimal)
+# Optional explicit two-byte sync word override (hex strings or decimal)
+LORA_SW_MSB = os.getenv('LORA_SW_MSB')
+LORA_SW_LSB = os.getenv('LORA_SW_LSB')
+LORA_SW_FORCE = os.getenv('LORA_SW_FORCE')  # e.g. '0x3424' to force 16-bit direct
 LORA_POWER = int(os.getenv('LORA_POWER', '20'))
 
 MQTT_HOST = os.getenv('MQTT_HOST', 'core-mosquitto')
@@ -308,13 +312,46 @@ def setup_lora():
         logger.info(f"Setting code rate to 4/{LORA_CR}...")
         lora.setCodeRate(LORA_CR)
         
-        # Set sync word - CRITICAL FIX
-        # The LoRaRF library expects 16-bit sync word (MSB+LSB)
-        # ESP32 Heltec Radio.SetSyncWord(0x34) sets BOTH bytes to 0x34 → 0x3434
-        # If we pass 0x34 to LoRaRF, it converts to 0x3444 (different!)
-        # So we must explicitly set 0x3434 to match ESP32
-        logger.info(f"Setting sync word to 0x3434 (ESP32 format: 0x34 in both bytes)...")
-        lora.setSyncWord(0x3434)  # Match ESP32: both MSB and LSB = 0x34
+        # ------------------------------------------------------------------
+        # Sync Word Handling
+        # ------------------------------------------------------------------
+        # Heltec SX1262 (esp32-s3) library transforms SetSyncWord(0x34) into
+        # register bytes MSB=0x34, LSB=0x24 (observed via direct register read).
+        # Our initial assumption of 0x3434 was incorrect, causing zero packets.
+        # We provide multiple override mechanisms:
+        # 1. LORA_SW_FORCE: full 16-bit value (e.g. 0x3424) applied directly.
+        # 2. LORA_SW_MSB + LORA_SW_LSB: raw register bytes (hex or decimal).
+        # 3. LORA_SW (legacy single byte): passed through setSyncWord; if <=0xFF
+        #    driver transforms it; we then read back to log actual register bytes.
+        # ------------------------------------------------------------------
+        applied_sync_desc = ""
+        try:
+            if LORA_SW_FORCE:
+                force_val = int(LORA_SW_FORCE, 0) if LORA_SW_FORCE.startswith(('0x','0X')) else int(LORA_SW_FORCE)
+                logger.info(f"Forcing 16-bit sync word 0x{force_val:04X} directly to registers")
+                msb = (force_val >> 8) & 0xFF
+                lsb = force_val & 0xFF
+                lora.writeRegister(lora.REG_LORA_SYNC_WORD_MSB, (msb, lsb), 2)
+                applied_sync_desc = f"raw=0x{force_val:04X} (MSB=0x{msb:02X} LSB=0x{lsb:02X})"
+            elif LORA_SW_MSB and LORA_SW_LSB:
+                msb = int(LORA_SW_MSB, 0) if LORA_SW_MSB.startswith(('0x','0X')) else int(LORA_SW_MSB)
+                lsb = int(LORA_SW_LSB, 0) if LORA_SW_LSB.startswith(('0x','0X')) else int(LORA_SW_LSB)
+                logger.info(f"Setting raw sync word bytes MSB=0x{msb:02X} LSB=0x{lsb:02X}")
+                lora.writeRegister(lora.REG_LORA_SYNC_WORD_MSB, (msb, lsb), 2)
+                applied_sync_desc = f"raw-bytes (MSB=0x{msb:02X} LSB=0x{lsb:02X})"
+            else:
+                # Legacy path: use driver transformation
+                logger.info(f"Setting legacy single-byte sync request 0x{LORA_SW:02X}")
+                if LORA_SW <= 0xFF:
+                    lora.setSyncWord(LORA_SW)
+                else:
+                    lora.setSyncWord(LORA_SW & 0xFFFF)
+                msb = lora.readRegister(lora.REG_LORA_SYNC_WORD_MSB, 1)[0]
+                lsb = lora.readRegister(lora.REG_LORA_SYNC_WORD_MSB+1, 1)[0]
+                applied_sync_desc = f"driver-transformed (requested=0x{LORA_SW:02X} actual MSB=0x{msb:02X} LSB=0x{lsb:02X})"
+        except Exception as e:
+            logger.error(f"Sync word configuration error: {e}")
+        logger.info(f"Sync word applied: {applied_sync_desc}")
         
         # Set packet parameters to match ESP32 Heltec configuration
         logger.info("Setting packet parameters...")
@@ -339,7 +376,13 @@ def setup_lora():
         logger.info(f"  Spreading Factor: {LORA_SF}")
         logger.info(f"  Bandwidth: {LORA_BW} Hz")
         logger.info(f"  Coding Rate: 4/{LORA_CR}")
-        logger.info(f"  Sync Word: 0x3434 (ESP32 format)")
+        # Read back final sync word bytes for confirmation
+        try:
+            final_msb = lora.readRegister(lora.REG_LORA_SYNC_WORD_MSB, 1)[0]
+            final_lsb = lora.readRegister(lora.REG_LORA_SYNC_WORD_MSB+1, 1)[0]
+            logger.info(f"  Sync Word Registers: MSB=0x{final_msb:02X} LSB=0x{final_lsb:02X} (combined 0x{final_msb:02X}{final_lsb:02X})")
+        except Exception as e:
+            logger.warning(f"  Sync Word readback failed: {e}")
         logger.info(f"  Preamble Length: 8")
         logger.info(f"  Header Type: Explicit (variable length)")
         logger.info(f"  CRC: Enabled")
@@ -403,7 +446,12 @@ def main():
             
             # Heartbeat every 10 seconds
             if time.time() - last_heartbeat > 10:
-                logger.info(f"💓 Heartbeat - Listening... (checked {stats['messages_received']} packets so far)")
+                # Instant RSSI sample (may show channel energy even without packets)
+                try:
+                    rssi_inst = lora.rssiInst()
+                    logger.info(f"💓 Heartbeat - Listening... (pkts {stats['messages_received']}) RSSIinst={rssi_inst:.1f}dBm")
+                except Exception:
+                    logger.info(f"💓 Heartbeat - Listening... (pkts {stats['messages_received']})")
                 last_heartbeat = time.time()
             
             # Publish statistics every 60 seconds

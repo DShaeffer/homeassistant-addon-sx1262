@@ -2,7 +2,22 @@
 
 All notable changes to this add-on will be documented in this file.
 
-## [1.0.0] - 2025-11-10
+## [1.4.0] - 2025-11-11
+
+### Added
+- Flexible sync word configuration (force 16-bit, raw MSB/LSB, legacy single byte)
+- Sync word register readback logging for alignment with Heltec ESP32 transformations
+- Heartbeat now includes instantaneous RSSI sampling
+- Expanded README with sync word transformation note and advanced overrides
+
+### Fixed
+- Mismatch assumption of ESP32 sync word (0x3434) vs actual transformed bytes (observed 0x3424)
+- Improved troubleshooting guidance when no packets are received
+
+### Changed
+- Default documentation sync word example updated to 0x34 with explanation of transformation
+
+## [1.3.4] - 2025-11-10
 
 ### Added
 - Initial release of SX1262 LoRa Gateway add-on

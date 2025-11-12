@@ -51,13 +51,19 @@ remote sensors (such as the ESP32 water sensor bridge) and integrate them into H
 ### LoRa Settings
 
 ```yaml
-lora_frequency: 915.0          # Frequency in MHz (902-928 for US)
-lora_spreading_factor: 7       # SF7-SF12 (7=fastest, 12=longest range)
-lora_bandwidth: 125000         # Bandwidth in Hz (125kHz default)
-lora_coding_rate: 5            # 4/5, 4/6, 4/7, 4/8
-lora_sync_word: 0x12          # Must match ESP32 setting
-lora_tx_power: 20             # TX power in dBm (2-22)
+lora_frequency: 915.0            # Frequency in MHz (902-928 for US)
+lora_spreading_factor: 7         # SF7-SF12 (7=fastest, 12=longest range)
+lora_bandwidth: 125000           # Bandwidth in Hz (125kHz default)
+lora_coding_rate: 5              # 4/5, 4/6, 4/7, 4/8
+lora_sync_word: 0x34             # Single-byte legacy request (will be transformed by Heltec / driver)
+# Optional advanced overrides (add only if needed):
+# lora_sync_word_force: 0x3424   # Force a full 16-bit sync word directly
+# lora_sync_word_msb: 0x34       # Raw MSB byte
+# lora_sync_word_lsb: 0x24       # Raw LSB byte
+lora_tx_power: 20                # TX power in dBm (2-22)
 ```
+
+> Sync Word Note: Heltec's SX1262 ESP32 library may transform a single-byte sync request (e.g. 0x34) into two register bytes (observed MSB=0x34, LSB=0x24). If your ESP32 test sketch reads back these registers, configure the gateway to match using `lora_sync_word_force` or the raw MSB/LSB fields.
 
 ### MQTT Settings
 
@@ -160,9 +166,11 @@ mqtt:
 
 ### No messages received
 - Verify ESP32 is transmitting (check ESP32 Serial Monitor)
-- Ensure LoRa parameters match between ESP32 and gateway
+- Ensure frequency, SF, BW, CR match
+- Read ESP32 LoRa sync registers (0x0740 & 0x0741) and mirror on gateway if they differ from expected
 - Check antenna connections on both devices
 - Verify frequency is correct for your region (915MHz for US)
+- Enable `debug` log level to see RSSI instant values; if RSSI stays near -120 dBm you may be off-frequency or disconnected
 
 ### MQTT not working
 - Verify Mosquitto broker add-on is installed and running
@@ -173,7 +181,8 @@ mqtt:
 - Move devices closer together initially to verify communication
 - Check antenna orientation (vertical is best for omni-directional)
 - Increase spreading factor (reduces speed but increases range)
-- Check for interference sources
+- Confirm gateway logs show correct sync word register bytes
+- Check for interference sources (WiFi, other 915MHz devices)
 
 ## Support
 
