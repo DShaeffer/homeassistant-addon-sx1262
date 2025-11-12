@@ -744,11 +744,23 @@ void enterDeepSleep() {
     oled.display();
     VextOFF();
     
-    // End SPI to release radio peripheral (avoids LoadProhibited on sleep entry)
+    // CRITICAL: Put radio to sleep BEFORE ending SPI (avoids LoadProhibited crash)
+    Radio.Sleep();
+    
+    // End SPI to release radio peripheral
     SPI.end();
     
+    // Optional: Set radio pins to ANALOG to reduce power leakage in deep sleep
+    pinMode(RADIO_DIO_1, ANALOG);
+    pinMode(RADIO_NSS, ANALOG);
+    pinMode(RADIO_RESET, ANALOG);
+    pinMode(RADIO_BUSY, ANALOG);
+    pinMode(LORA_CLK, ANALOG);
+    pinMode(LORA_MISO, ANALOG);
+    pinMode(LORA_MOSI, ANALOG);
+    
     // Give peripherals time to fully shut down
-    delay(200);
+    delay(100);
     
     // Configure wake sources
     if (SLEEP_INTERVAL_SECONDS > 0) {
