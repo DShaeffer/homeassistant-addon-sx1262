@@ -943,6 +943,36 @@ void setup() {
     // Check why we woke up
     checkWakeReason();
     
+    // If this is a power-on boot (not a wake from sleep), go directly to sleep
+    // We only want to run when woken by UART or button press
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) {
+        Serial.println("🌅 Initial power-on boot detected");
+        Serial.println("💤 Going directly to deep sleep - will wake on UART activity");
+        
+        // Save counters
+        preferences.putUInt("bootCount", bootCount);
+        preferences.putUInt("totalTx", totalTransmissions);
+        preferences.putUInt("btnWake", buttonWakeCount);
+        preferences.putUInt("tmrWake", timerWakeCount);
+        preferences.putUInt("uartWake", uartWakeCount);
+        
+        // Configure wake sources
+        if (UART_WAKE_ENABLED) {
+            uint64_t mask = (1ULL << SENSOR_SERIAL_RX);
+            esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ALL_LOW);
+        }
+        if (SLEEP_INTERVAL_SECONDS > 0) {
+            esp_sleep_enable_timer_wakeup(SLEEP_INTERVAL_SECONDS * 1000000ULL);
+        }
+        if (BUTTON_WAKE_ENABLED) {
+            esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
+        }
+        
+        delay(100);
+        esp_deep_sleep_start();
+    }
+    
     // Initialize display (only if active)
     if (displayActive) {
         VextON();
