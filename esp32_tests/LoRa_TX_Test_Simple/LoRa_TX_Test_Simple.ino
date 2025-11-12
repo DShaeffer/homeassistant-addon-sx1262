@@ -45,8 +45,11 @@ uint32_t license[4] = {0x3521755D, 0xB0401FFE, 0xA7307FF6, 0xDDFE8E4E};
 #define LORA_FIX_LENGTH_PAYLOAD_ON  false
 #define LORA_IQ_INVERSION_ON        false
 
-#define BUFFER_SIZE                 128           // Buffer size
+#define BUFFER_SIZE                 256           // Buffer size (increased to accommodate JSON with water/battery/meta)
 #define TX_INTERVAL_MS              6000          // Transmit every 6 seconds (slightly longer for gateway scanning)
+
+// Set to 0 to DISABLE sync rotation and use a fixed raw sync (recommended now that gateway is aligned)
+#define ENABLE_SYNC_ROTATION        0
 
 // ============================================================================
 // GLOBALS
@@ -55,7 +58,9 @@ uint32_t license[4] = {0x3521755D, 0xB0401FFE, 0xA7307FF6, 0xDDFE8E4E};
 char txpacket[BUFFER_SIZE];
 uint32_t packetCount = 0;
 bool lora_idle = true;
-uint8_t syncMode = 0; // 0: 0x34 (->0x3434), 1: public 0x3444, 2: private 0x0741, 3: raw forced 0x3434 via registers
+#if ENABLE_SYNC_ROTATION
+uint8_t syncMode = 0; // rotation state
+#endif
 
 static RadioEvents_t RadioEvents;
 void OnTxDone(void);
@@ -110,13 +115,20 @@ void setup() {
     Serial.println("Radio.Init() done.");
     Radio.SetChannel(RF_FREQUENCY);
     Serial.printf("SetChannel(%d) done.\n", RF_FREQUENCY);
-    // Initial sync word mode will be handled per-packet; do first apply here for clarity.
+    // Apply initial sync strategy
+#if ENABLE_SYNC_ROTATION
     Radio.SetSyncWord(0x34);
     Serial.println("Initial sync word request: 0x34 (ESP API). Will rotate modes per packet.\n");
-    // Read back LoRa sync word registers (0x0740 MSB, 0x0741 LSB) using direct SPI driver in Heltec lib
-    uint8_t msb = readReg(0x0740); // LoRa sync word MSB
-    uint8_t lsb = readReg(0x0741); // LoRa sync word LSB
+    uint8_t msb = readReg(0x0740); uint8_t lsb = readReg(0x0741);
     Serial.printf("Readback after SetSyncWord(0x34): MSB=0x%02X LSB=0x%02X (combined 0x%02X%02X)\n", msb, lsb, msb, lsb);
+#else
+    // FIXED MODE: Force raw sync bytes MSB=0x34 LSB=0x24 every boot
+    writeReg(0x0740, 0x34);
+    writeReg(0x0741, 0x24);
+    uint8_t msb = readReg(0x0740); uint8_t lsb = readReg(0x0741);
+    Serial.printf("Fixed sync word raw write -> Reg MSB=0x%02X LSB=0x%02X (0x%02X%02X)\n", msb, lsb, msb, lsb);
+    Serial.println("Sync rotation disabled (ENABLE_SYNC_ROTATION=0). Using constant 0x3424 pattern.\n");
+#endif
     Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                       LORA_SPREADING_FACTOR, LORA_CODINGRATE,
                       LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
@@ -150,38 +162,47 @@ void loop() {
         
         packetCount++;
         
-        // Rotate sync word test modes BEFORE building packet
-        // Mode mapping:
-        // 0 -> API SetSyncWord(0x34) (expect driver writes 0x34,0x34)
-        // 1 -> API SetSyncWord(0x44) then manual patch to get 0x3444 (public)
-        // 2 -> API SetSyncWord(0x41) attempt to reach private 0x0741 (will observe transformation)
-        // 3 -> Raw register write 0x34,0x34 bypassing helper (force exact 0x3434) then resend
         uint8_t msb, lsb;
-        if(syncMode == 0) {
-            Radio.SetSyncWord(0x34);
-            msb = readReg(0x0740); lsb = readReg(0x0741);
-            Serial.printf("[SyncMode 0] Applied SetSyncWord(0x34). Reg MSB=0x%02X LSB=0x%02X\n", msb, lsb);
-        } else if(syncMode == 1) {
-            Radio.SetSyncWord(0x44);
-            msb = readReg(0x0740); lsb = readReg(0x0741);
-            Serial.printf("[SyncMode 1] Applied SetSyncWord(0x44). Reg MSB=0x%02X LSB=0x%02X\n", msb, lsb);
-        } else if(syncMode == 2) {
-            Radio.SetSyncWord(0x41);
-            msb = readReg(0x0740); lsb = readReg(0x0741);
-            Serial.printf("[SyncMode 2] Applied SetSyncWord(0x41). Reg MSB=0x%02X LSB=0x%02X\n", msb, lsb);
-        } else if(syncMode == 3) {
-            // Raw write 0x34,0x34 to registers bypassing transformation
-            writeReg(0x0740, 0x34);
-            writeReg(0x0741, 0x34);
-            msb = readReg(0x0740); lsb = readReg(0x0741);
-            Serial.printf("[SyncMode 3] Raw write 0x34,0x34. Reg MSB=0x%02X LSB=0x%02X\n", msb, lsb);
-        }
+#if ENABLE_SYNC_ROTATION
+        // Rotation mode (diagnostic)
+        if(syncMode == 0) { Radio.SetSyncWord(0x34); }
+        else if(syncMode == 1) { Radio.SetSyncWord(0x44); }
+        else if(syncMode == 2) { Radio.SetSyncWord(0x41); }
+        else if(syncMode == 3) { writeReg(0x0740, 0x34); writeReg(0x0741, 0x34); }
+        msb = readReg(0x0740); lsb = readReg(0x0741);
+        Serial.printf("[SyncMode %u] Reg MSB=0x%02X LSB=0x%02X\n", syncMode, msb, lsb);
         syncMode = (syncMode + 1) % 4;
-
-        // Build packet with current sync mode embedded for visibility
-        snprintf(txpacket, sizeof(txpacket), 
-                 "{\"test\":\"esp32\",\"packet\":%lu,\"uptime\":%lu,\"syncMode\":%u,\"regMSB\":%u,\"regLSB\":%u}", 
-                 packetCount, millis() / 1000, (unsigned)( (syncMode+3) % 4 ), msb, lsb);
+    // Include water/battery sample data so gateway publishes useful metrics
+    // Dummy values: level_cm cycles 0-99, percent approximated, raw_distance synthetic
+    uint16_t level_cm = packetCount % 100;
+    uint8_t percent = (level_cm > 100 ? 100 : level_cm);
+    uint16_t raw_distance = 200 - level_cm; // pretend inverse relationship
+    uint8_t state = 1; // 1 = OK
+    float battery_voltage = 3.95f; // static demo value
+    snprintf(txpacket, sizeof(txpacket), 
+         "{\"water\":{\"level_cm\":%u,\"percent\":%u,\"raw_distance\":%u,\"state\":%u},"
+         "\"battery\":{\"voltage\":%.2f,\"unit\":\"V\"},"
+         "\"meta\":{\"test\":\"esp32\",\"packet\":%lu,\"uptime\":%lu,\"mode\":%u,\"regMSB\":%u,\"regLSB\":%u}}",
+         level_cm, percent, raw_distance, state, battery_voltage,
+         packetCount, millis() / 1000, (unsigned)((syncMode+3)%4), msb, lsb);
+#else
+        // Fixed mode: reassert raw sync to guard against library writes
+        writeReg(0x0740, 0x34);
+        writeReg(0x0741, 0x24);
+        msb = readReg(0x0740); lsb = readReg(0x0741);
+    // Include water/battery sample data so gateway publishes useful metrics
+    uint16_t level_cm = packetCount % 100;
+    uint8_t percent = (level_cm > 100 ? 100 : level_cm);
+    uint16_t raw_distance = 200 - level_cm; // synthetic demo inverse
+    uint8_t state = 1; // OK
+    float battery_voltage = 3.95f; // demo static value
+    snprintf(txpacket, sizeof(txpacket), 
+         "{\"water\":{\"level_cm\":%u,\"percent\":%u,\"raw_distance\":%u,\"state\":%u},"
+         "\"battery\":{\"voltage\":%.2f,\"unit\":\"V\"},"
+         "\"meta\":{\"test\":\"esp32\",\"packet\":%lu,\"uptime\":%lu,\"regMSB\":%u,\"regLSB\":%u}}",
+         level_cm, percent, raw_distance, state, battery_voltage,
+         packetCount, millis() / 1000, msb, lsb);
+#endif
         
         Serial.println("\n📡 ========================================");
         Serial.printf("📡 TX Packet #%lu\n", packetCount);
