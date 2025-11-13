@@ -178,60 +178,11 @@ uint32_t wakeTime = 0;
 // LoRa state
 bool loraInitialized = false;
 static RadioEvents_t RadioEvents;
-volatile bool loraTxDone = false;
 
 // Fast path: reboot into deep sleep after TX to avoid peripheral teardown races
 #define REBOOT_BEFORE_SLEEP 1
 RTC_DATA_ATTR uint32_t rebootToSleepMagic = 0;
 #define REBOOT_TO_SLEEP_MAGIC 0xDEED5EEDul
-
-// Persist last known-good telemetry across deep sleep to prevent HA zeroing
-typedef struct {
-    int sensorLevel_cm;
-    int sensorPercent;
-    float rawDistance_cm;
-    int instHeight_cm;
-    int sensorState;
-    int maxThreshold;
-    int minThreshold;
-    float batteryVoltage;
-    int batteryUnit;
-    int wifiState;
-    bool valid;
-} LastGoodTelemetry;
-
-RTC_DATA_ATTR LastGoodTelemetry lastGood = {0};
-
-// Persist last-good telemetry in NVS to survive software reboot
-void saveLastGood() {
-    preferences.putInt("lg_lvl", lastGood.sensorLevel_cm);
-    preferences.putInt("lg_pct", lastGood.sensorPercent);
-    preferences.putFloat("lg_raw", lastGood.rawDistance_cm);
-    preferences.putInt("lg_inst", lastGood.instHeight_cm);
-    preferences.putInt("lg_st", lastGood.sensorState);
-    preferences.putInt("lg_max", lastGood.maxThreshold);
-    preferences.putInt("lg_min", lastGood.minThreshold);
-    preferences.putFloat("lg_bv", lastGood.batteryVoltage);
-    preferences.putInt("lg_bu", lastGood.batteryUnit);
-    preferences.putInt("lg_wifi", lastGood.wifiState);
-    preferences.putBool("lg_valid", lastGood.valid);
-}
-
-void loadLastGood() {
-    lastGood.valid = preferences.getBool("lg_valid", false);
-    if (lastGood.valid) {
-        lastGood.sensorLevel_cm = preferences.getInt("lg_lvl", 0);
-        lastGood.sensorPercent = preferences.getInt("lg_pct", 0);
-        lastGood.rawDistance_cm = preferences.getFloat("lg_raw", 0);
-        lastGood.instHeight_cm = preferences.getInt("lg_inst", 0);
-        lastGood.sensorState = preferences.getInt("lg_st", 0);
-        lastGood.maxThreshold = preferences.getInt("lg_max", 0);
-        lastGood.minThreshold = preferences.getInt("lg_min", 0);
-        lastGood.batteryVoltage = preferences.getFloat("lg_bv", 0);
-        lastGood.batteryUnit = preferences.getInt("lg_bu", 0);
-        lastGood.wifiState = preferences.getInt("lg_wifi", 0);
-    }
-}
 
 // ============================================================================
 // VEXT POWER CONTROL (OLED)
@@ -538,6 +489,46 @@ void parseSensorLine(String line) {
     }
 }
 
+// Save sensor data to NVS (preserves across reboots)
+void saveSensorData() {
+    preferences.putFloat("raw_cm", sensorData.rawDistance_cm);
+    preferences.putFloat("bat_v", sensorData.batteryVoltage);
+    preferences.putInt("bat_u", sensorData.batteryUnit);
+    preferences.putInt("lvl_cm", sensorData.sensorLevel_cm);
+    preferences.putInt("pct", sensorData.sensorPercent);
+    preferences.putInt("state", sensorData.sensorState);
+    preferences.putInt("inst_cm", sensorData.instHeight_cm);
+    preferences.putInt("dep_max", sensorData.depthMax_cm);
+    preferences.putInt("max_thr", sensorData.maxThreshold);
+    preferences.putInt("min_thr", sensorData.minThreshold);
+    preferences.putInt("wifi", sensorData.wifiState);
+    preferences.putBool("valid", sensorData.valid);
+    Serial.println("💾 Sensor data saved to NVS");
+}
+
+// Load sensor data from NVS (restores after reboot)
+void loadSensorData() {
+    if (preferences.getBool("valid", false)) {
+        sensorData.rawDistance_cm = preferences.getFloat("raw_cm", 0);
+        sensorData.batteryVoltage = preferences.getFloat("bat_v", 0);
+        sensorData.batteryUnit = preferences.getInt("bat_u", 0);
+        sensorData.sensorLevel_cm = preferences.getInt("lvl_cm", 0);
+        sensorData.sensorPercent = preferences.getInt("pct", 0);
+        sensorData.sensorState = preferences.getInt("state", 0);
+        sensorData.instHeight_cm = preferences.getInt("inst_cm", 0);
+        sensorData.depthMax_cm = preferences.getInt("dep_max", 0);
+        sensorData.maxThreshold = preferences.getInt("max_thr", 0);
+        sensorData.minThreshold = preferences.getInt("min_thr", 0);
+        sensorData.wifiState = preferences.getInt("wifi", 0);
+        sensorData.valid = true;
+        Serial.println("💾 Sensor data restored from NVS");
+        Serial.printf("   Level: %d cm, Percent: %d%%, Battery: %.2fV\n",
+                     sensorData.sensorLevel_cm, sensorData.sensorPercent, sensorData.batteryVoltage);
+    } else {
+        Serial.println("💾 No saved sensor data in NVS");
+    }
+}
+
 void readSensorSerial() {
     static uint32_t lastDebug = 0;
     static uint32_t bytesReceived = 0;
@@ -603,35 +594,23 @@ String createJSON() {
     doc["ts"] = millis();
     doc["up"] = sensorData.powerTime_s;
     
-    // Build payload using current values with fallback to last known good
-    int lvlEff = sensorData.sensorLevel_cm > 0 ? sensorData.sensorLevel_cm : (lastGood.valid ? lastGood.sensorLevel_cm : 0);
-    int pctEff = sensorData.sensorPercent > 0 ? sensorData.sensorPercent : (lastGood.valid ? lastGood.sensorPercent : 0);
-    float rawEff = sensorData.rawDistance_cm > 0 ? sensorData.rawDistance_cm : (lastGood.valid ? lastGood.rawDistance_cm : 0);
-    int instEff = sensorData.instHeight_cm > 0 ? sensorData.instHeight_cm : (lastGood.valid ? lastGood.instHeight_cm : 0);
-    int stEff = (sensorData.sensorState != 0 ? sensorData.sensorState : (lastGood.valid ? lastGood.sensorState : 0));
-    int maxEff = sensorData.maxThreshold > 0 ? sensorData.maxThreshold : (lastGood.valid ? lastGood.maxThreshold : 0);
-    int minEff = sensorData.minThreshold > 0 ? sensorData.minThreshold : (lastGood.valid ? lastGood.minThreshold : 0);
-    float battVEff = sensorData.batteryVoltage > 0 ? sensorData.batteryVoltage : (lastGood.valid ? lastGood.batteryVoltage : 0);
-    int battUEff = sensorData.batteryUnit > 0 ? sensorData.batteryUnit : (lastGood.valid ? lastGood.batteryUnit : 0);
-    int wifiEff = (sensorData.wifiState == 0 && lastGood.valid) ? lastGood.wifiState : sensorData.wifiState;
-
-    // Water data - use effective values
+    // Water data - use S_Level (computed actual height)
     JsonObject water = doc.createNestedObject("water");
-    water["lvl"] = lvlEff;              // Actual liquid height (Inst_H - R_L)
-    water["pct"] = pctEff;               // % full based on thresholds
-    water["raw"] = round(rawEff * 10) / 10.0;  // Sensor to surface
-    water["inst"] = instEff;              // Sensor to bottom
-    water["st"] = stEff;                  // 0=normal, 1=low, 2=high
+    water["lvl"] = sensorData.sensorLevel_cm;              // Actual liquid height (Inst_H - R_L)
+    water["pct"] = sensorData.sensorPercent;               // % full based on thresholds
+    water["raw"] = round(sensorData.rawDistance_cm * 10) / 10.0;  // Sensor to surface
+    water["inst"] = sensorData.instHeight_cm;              // Sensor to bottom
+    water["st"] = sensorData.sensorState;                  // 0=normal, 1=low, 2=high
     
     // Thresholds
     JsonObject thr = doc.createNestedObject("thr");
-    thr["max"] = maxEff;
-    thr["min"] = minEff;
+    thr["max"] = sensorData.maxThreshold;
+    thr["min"] = sensorData.minThreshold;
     
     // Battery
     JsonObject batt = doc.createNestedObject("batt");
-    batt["v"] = round(battVEff * 100) / 100.0;
-    batt["u"] = battUEff;                    // 0-100 scale
+    batt["v"] = round(sensorData.batteryVoltage * 100) / 100.0;
+    batt["u"] = sensorData.batteryUnit;                    // 0-100 scale
     
     // Environment
     if (sensorData.temperature != 0) {
@@ -640,7 +619,7 @@ String createJSON() {
     
     // Status (minimal - only include what's needed)
     JsonObject stat = doc.createNestedObject("stat");
-    stat["wifi"] = wifiEff;
+    stat["wifi"] = sensorData.wifiState;
     stat["lp"] = sensorData.lowPowerMode;
     
     String output;
@@ -655,14 +634,12 @@ String createJSON() {
 // Radio event callbacks (required for Heltec Radio API)
 void OnTxDone(void) {
     Serial.println("📡 LoRa TX Done");
-    loraTxDone = true;
 }
 
 void OnTxTimeout(void) {
     Serial.println("⚠️  LoRa TX Timeout");
     // COMMENTED OUT - Causes crash on some Heltec boards
     // Radio.Sleep();
-    loraTxDone = true;
 }
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
@@ -729,14 +706,6 @@ void initLoRa() {
                   LORA_TX_POWER);
 }
 
-static void waitForTxDone(uint32_t timeoutMs = 2000) {
-    uint32_t start = millis();
-    while (!loraTxDone && (millis() - start < timeoutMs)) {
-        Radio.IrqProcess();
-        delay(5);
-    }
-}
-
 void transmitLoRa() {
     if (!ENABLE_LORA) {
         Serial.println("\n📡 LoRa transmission (disabled):");
@@ -769,23 +738,10 @@ void transmitLoRa() {
     json.getBytes(txBuffer, len + 1);
     
     Serial.printf("📡 Packet size: %d bytes\n", len);
-    loraTxDone = false;
     Radio.Send(txBuffer, len);
     
-    Serial.println("📡 Waiting for TX completion...");
-    // Wait for TX to complete (blocking with IRQ processing)
-    waitForTxDone(2500);
-    
-    if (loraTxDone) {
-        Serial.println("✅ TX confirmed done");
-    } else {
-        Serial.println("⚠️  TX timeout (still sending or failed)");
-    }
-    
-#if REBOOT_BEFORE_SLEEP
-    // Mark that after this TX we prefer a reboot to guarantee pristine hardware state before sleep
-    rebootToSleepMagic = REBOOT_TO_SLEEP_MAGIC;
-#endif
+    // Wait for TX to complete (blocking)
+    delay(100);  // Brief delay for transmission
     
     Serial.println("📡 ========================================\n");
 }
@@ -1027,8 +983,6 @@ void setup() {
         timerWakeCount = preferences.getUInt("tmrWake", 0);
         uartWakeCount = preferences.getUInt("uartWake", 0);
     }
-    // Load last-good telemetry (persisted across software restarts)
-    loadLastGood();
     
     // Check why we woke up
     checkWakeReason();
@@ -1088,10 +1042,13 @@ void setup() {
     memset(&sensorData, 0, sizeof(sensorData));
     sensorDataReceived = false;
     
+    // Try to load previously saved sensor data from NVS (fallback for partial ME201W transmissions)
+    loadSensorData();
+    
     Serial.printf("⏰ Sensor read timeout: %d seconds\n", SENSOR_READ_TIMEOUT_MS / 1000);
     
     if (UART_WAKE_ENABLED) {
-        Serial.println("💤 Power Mode: Deep Sleep + EXT1 Serial Wake");
+        Serial.println("💤 Power Mode: Deep Sleep + EXT0 Serial Wake");
         Serial.printf("💤 RX pin: GPIO%d (idle HIGH, wake on LOW start bit)\n", SENSOR_SERIAL_RX);
         Serial.printf("💤 Backup timer: %d seconds\n", SLEEP_INTERVAL_SECONDS);
         Serial.println("⚠️  First byte of transmission may be lost (wake latency) - sensor sends multiple lines so OK.");
@@ -1129,45 +1086,32 @@ void loop() {
     // Check if we got valid sensor data (valid flag is set when R_L is received)
     // IMPROVED: Wait for multiple key fields to ensure complete data packet
     if (sensorData.valid && !sensorDataReceived) {
-        Serial.printf("🔍 Checking completeness: battery=%.2fV, level=%dcm\n", 
-                     sensorData.batteryVoltage, sensorData.sensorLevel_cm);
+        // Check for complete data: battery voltage AND at least one level reading
+        bool hasComplete = (sensorData.batteryVoltage > 0) && 
+                          (sensorData.sensorLevel_cm > 0 || sensorData.rawDistance_cm > 0);
         
-        if ((sensorData.batteryVoltage > 0) && (sensorData.sensorLevel_cm > 0)) {
+        if (hasComplete) {
             sensorDataReceived = true;
             Serial.println("✅ Complete sensor data received!");
             Serial.printf("   Level: %d cm, Percent: %d%%, Battery: %.2fV\n",
                          sensorData.sensorLevel_cm, sensorData.sensorPercent, sensorData.batteryVoltage);
             
-            // Cache last good telemetry to RTC for fallback next cycle
-            lastGood.sensorLevel_cm = sensorData.sensorLevel_cm;
-            lastGood.sensorPercent = sensorData.sensorPercent;
-            lastGood.rawDistance_cm = sensorData.rawDistance_cm;
-            lastGood.instHeight_cm = sensorData.instHeight_cm;
-            lastGood.sensorState = sensorData.sensorState;
-            lastGood.maxThreshold = sensorData.maxThreshold;
-            lastGood.minThreshold = sensorData.minThreshold;
-            lastGood.batteryVoltage = sensorData.batteryVoltage;
-            lastGood.batteryUnit = sensorData.batteryUnit;
-            lastGood.wifiState = sensorData.wifiState;
-            lastGood.valid = true;
-            saveLastGood();
-
             // Transmit via LoRa
             transmitLoRa();
             totalTransmissions++;
+            
+            // Save sensor data before reboot (preserves across ESP.restart)
+            saveSensorData();
             
             // Go back to sleep immediately after transmission (unless display is active)
             if (!displayActive && DEEP_SLEEP_ENABLED) {
                 Serial.println("💤 Data transmitted - going back to sleep");
                 delay(100);  // Brief delay to ensure serial output completes
-#if REBOOT_BEFORE_SLEEP
-                // Reboot to clean peripheral state, then fast-path into deep sleep
+                // Always use reboot-to-sleep to avoid crashes
                 Serial.println("🔄 Rebooting to guarantee clean sleep entry...");
+                rebootToSleepMagic = REBOOT_TO_SLEEP_MAGIC;
                 delay(50);
                 ESP.restart();
-#else
-                enterDeepSleep();
-#endif
             } else if (!DEEP_SLEEP_ENABLED) {
                 // If deep sleep is disabled (testing mode), reset flags after transmission
                 // so we can transmit again when new sensor data arrives
@@ -1195,9 +1139,17 @@ void loop() {
             oled.display();
             VextOFF();
             
-            // If we already have data, go to sleep
-            if (sensorDataReceived && DEEP_SLEEP_ENABLED) {
-                readyForSleep = true;
+            // Save data before sleeping
+            if (sensorData.valid) {
+                saveSensorData();
+            }
+            
+            // Use reboot-to-sleep to avoid crashes
+            if (DEEP_SLEEP_ENABLED) {
+                Serial.println("🔄 Rebooting to sleep after display timeout...");
+                rebootToSleepMagic = REBOOT_TO_SLEEP_MAGIC;
+                delay(50);
+                ESP.restart();
             }
         }
     }
@@ -1217,27 +1169,20 @@ void loop() {
         bool hasData = sensorDataReceived;
         
         if (readyForSleep || (timedOut && !displayActive)) {
-            Serial.printf("💤 Sleep condition met: readyForSleep=%d, timedOut=%d, hasData=%d, lastGood.valid=%d\n",
-                         readyForSleep, timedOut, hasData, lastGood.valid);
-            
             if (timedOut && !hasData) {
-                if (lastGood.valid) {
-                    Serial.println("⚠️  Sensor read timeout - using last-good values and transmitting anyway");
-                    transmitLoRa();
-                    totalTransmissions++;
-                } else {
-                    Serial.println("⚠️  Sensor read timeout - no last-good values available (skipping TX)");
-                }
+                Serial.println("⚠️  Sensor read timeout - sleeping anyway");
             }
-            // Use reboot-to-sleep path to avoid deep sleep panic during teardown
-#if REBOOT_BEFORE_SLEEP
+            
+            // Save data before sleeping
+            if (sensorData.valid) {
+                saveSensorData();
+            }
+            
+            // Use reboot-to-sleep to avoid crashes
+            Serial.println("🔄 Rebooting to sleep...");
             rebootToSleepMagic = REBOOT_TO_SLEEP_MAGIC;
-            Serial.println("🔄 Rebooting to enter deep sleep cleanly (timeout or display off)...");
             delay(50);
             ESP.restart();
-#else
-            enterDeepSleep();
-#endif
         }
     } else {
         // Deep sleep disabled - just keep running
