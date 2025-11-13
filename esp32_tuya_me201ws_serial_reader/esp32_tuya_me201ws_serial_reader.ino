@@ -175,6 +175,12 @@ bool readyForSleep = false;
 bool sensorDataReceived = false;
 uint32_t wakeTime = 0;
 
+// Track which fields were received in this wake cycle (to ensure complete data)
+bool receivedThisWake_RawDistance = false;
+bool receivedThisWake_Level = false;
+bool receivedThisWake_Battery = false;
+bool receivedThisWake_InstHeight = false;
+
 // LoRa state
 bool loraInitialized = false;
 static RadioEvents_t RadioEvents;
@@ -393,6 +399,7 @@ void parseSensorLine(String line) {
         sensorData.rawDistance_cm = parseFloat(line, "R_L =");
         sensorData.valid = true;
         sensorData.lastUpdate = millis();
+        receivedThisWake_RawDistance = true;
         Serial.printf("📏 Raw Distance: %.1f cm (sensor to surface) [NEW]\n", sensorData.rawDistance_cm);
     }
     
@@ -419,6 +426,7 @@ void parseSensorLine(String line) {
     // Real-time sensor level (same as Level_Cache, updated live)
     if (line.indexOf("S_Level =") != -1) {
         sensorData.sensorLevel_cm = parseInt(line, "S_Level =");
+        receivedThisWake_Level = true;
         Serial.printf("💧 Sensor Level: %d cm [NEW]\n", sensorData.sensorLevel_cm);
     }
     
@@ -437,6 +445,7 @@ void parseSensorLine(String line) {
     // Battery voltage
     if (line.indexOf("Bat_V =") != -1) {
         sensorData.batteryVoltage = parseFloat(line, "Bat_V =");
+        receivedThisWake_Battery = true;
         Serial.printf("🔋 Battery: %.3f V [NEW]\n", sensorData.batteryVoltage);
     }
     
@@ -469,6 +478,7 @@ void parseSensorLine(String line) {
     // Installation height (sensor to tank bottom)
     if (line.indexOf("Inst_H =") != -1) {
         sensorData.instHeight_cm = parseInt(line, "Inst_H =");
+        receivedThisWake_InstHeight = true;
         Serial.printf("📐 Install Height: %d cm [NEW]\n", sensorData.instHeight_cm);
     }
     
@@ -1044,8 +1054,11 @@ void setup() {
     memset(&sensorData, 0, sizeof(sensorData));
     sensorDataReceived = false;
     
-    // Try to load previously saved sensor data from NVS (fallback for partial ME201W transmissions)
-    loadSensorData();
+    // Reset "received this wake" tracking flags
+    receivedThisWake_RawDistance = false;
+    receivedThisWake_Level = false;
+    receivedThisWake_Battery = false;
+    receivedThisWake_InstHeight = false;
     
     Serial.printf("⏰ Sensor read timeout: %d seconds\n", SENSOR_READ_TIMEOUT_MS / 1000);
     
@@ -1085,25 +1098,23 @@ void loop() {
     // Read sensor serial data
     readSensorSerial();
     
-    // Check if we got valid sensor data (valid flag is set when R_L is received)
-    // IMPROVED: Wait for multiple key fields to ensure complete data packet
+    // Check if we got COMPLETE fresh sensor data this wake cycle
+    // Only transmit if we received all critical fields in THIS session
     if (sensorData.valid && !sensorDataReceived) {
-        // Check for complete data: battery voltage AND at least one level reading
-        bool hasComplete = (sensorData.batteryVoltage > 0) && 
-                          (sensorData.sensorLevel_cm > 0 || sensorData.rawDistance_cm > 0);
+        bool hasCompleteData = receivedThisWake_RawDistance && 
+                              receivedThisWake_Level && 
+                              receivedThisWake_Battery && 
+                              receivedThisWake_InstHeight;
         
-        if (hasComplete) {
+        if (hasCompleteData) {
             sensorDataReceived = true;
-            Serial.println("✅ Complete sensor data received!");
+            Serial.println("✅ COMPLETE fresh sensor data received this wake!");
             Serial.printf("   Level: %d cm, Percent: %d%%, Battery: %.2fV\n",
                          sensorData.sensorLevel_cm, sensorData.sensorPercent, sensorData.batteryVoltage);
             
             // Transmit via LoRa
             transmitLoRa();
             totalTransmissions++;
-            
-            // Save sensor data before reboot (preserves across ESP.restart)
-            saveSensorData();
             
             // Go back to sleep immediately after transmission (unless display is active)
             if (!displayActive && DEEP_SLEEP_ENABLED) {
@@ -1121,6 +1132,20 @@ void loop() {
                 delay(2000);  // Brief delay before allowing next transmission
                 sensorDataReceived = false;
                 sensorData.valid = false;  // Reset valid flag to wait for fresh data
+                // Reset "received this wake" flags
+                receivedThisWake_RawDistance = false;
+                receivedThisWake_Level = false;
+                receivedThisWake_Battery = false;
+                receivedThisWake_InstHeight = false;
+            }
+        } else {
+            // Still waiting for complete data
+            static uint32_t lastIncompleteMsg = 0;
+            if (millis() - lastIncompleteMsg > 2000) {
+                lastIncompleteMsg = millis();
+                Serial.printf("⏳ Waiting for complete data... (RawDist:%d Level:%d Batt:%d InstH:%d)\n",
+                             receivedThisWake_RawDistance, receivedThisWake_Level, 
+                             receivedThisWake_Battery, receivedThisWake_InstHeight);
             }
         }
     }
@@ -1140,11 +1165,6 @@ void loop() {
             oled.clear();
             oled.display();
             VextOFF();
-            
-            // Save data before sleeping
-            if (sensorData.valid) {
-                saveSensorData();
-            }
             
             // Use reboot-to-sleep to avoid crashes
             if (DEEP_SLEEP_ENABLED) {
@@ -1173,11 +1193,6 @@ void loop() {
         if (readyForSleep || (timedOut && !displayActive)) {
             if (timedOut && !hasData) {
                 Serial.println("⚠️  Sensor read timeout - sleeping anyway");
-            }
-            
-            // Save data before sleeping
-            if (sensorData.valid) {
-                saveSensorData();
             }
             
             // Use reboot-to-sleep to avoid crashes
