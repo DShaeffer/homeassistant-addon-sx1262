@@ -155,7 +155,8 @@ SSD1306Wire oled(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
 Preferences preferences;
 HardwareSerial sensorSerial(1);  // Use UART1 for sensor communication
 
-ME201WData sensorData;
+// Store sensor data in RTC memory so it persists through reboot-to-sleep cycle
+RTC_DATA_ATTR ME201WData sensorData;
 String serialBuffer = "";
 uint32_t bootTime = 0;
 uint32_t displayActivatedTime = 0;
