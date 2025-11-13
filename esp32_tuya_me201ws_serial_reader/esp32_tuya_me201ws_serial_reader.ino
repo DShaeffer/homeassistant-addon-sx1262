@@ -178,6 +178,7 @@ uint32_t wakeTime = 0;
 // LoRa state
 bool loraInitialized = false;
 static RadioEvents_t RadioEvents;
+volatile bool loraTxDone = false;
 
 // Fast path: reboot into deep sleep after TX to avoid peripheral teardown races
 #define REBOOT_BEFORE_SLEEP 1
@@ -654,12 +655,14 @@ String createJSON() {
 // Radio event callbacks (required for Heltec Radio API)
 void OnTxDone(void) {
     Serial.println("📡 LoRa TX Done");
+    loraTxDone = true;
 }
 
 void OnTxTimeout(void) {
     Serial.println("⚠️  LoRa TX Timeout");
     // COMMENTED OUT - Causes crash on some Heltec boards
     // Radio.Sleep();
+    loraTxDone = true;
 }
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr) {
@@ -726,6 +729,14 @@ void initLoRa() {
                   LORA_TX_POWER);
 }
 
+static void waitForTxDone(uint32_t timeoutMs = 2000) {
+    uint32_t start = millis();
+    while (!loraTxDone && (millis() - start < timeoutMs)) {
+        Radio.IrqProcess();
+        delay(5);
+    }
+}
+
 void transmitLoRa() {
     if (!ENABLE_LORA) {
         Serial.println("\n📡 LoRa transmission (disabled):");
@@ -758,10 +769,11 @@ void transmitLoRa() {
     json.getBytes(txBuffer, len + 1);
     
     Serial.printf("📡 Packet size: %d bytes\n", len);
+    loraTxDone = false;
     Radio.Send(txBuffer, len);
     
-    // Wait for TX to complete (blocking)
-    delay(100);  // Brief delay for transmission
+    // Wait for TX to complete (blocking with IRQ processing)
+    waitForTxDone(2500);
     
 #if REBOOT_BEFORE_SLEEP
     // Mark that after this TX we prefer a reboot to guarantee pristine hardware state before sleep
