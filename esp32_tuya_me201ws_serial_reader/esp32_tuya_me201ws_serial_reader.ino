@@ -1003,9 +1003,13 @@ void setup() {
                   SENSOR_SERIAL_RX, SENSOR_BAUD_RATE);
     sensorSerial.begin(SENSOR_BAUD_RATE, SERIAL_8N1, SENSOR_SERIAL_RX, SENSOR_SERIAL_TX);
     
-    // Initialize sensor data structure
-    memset(&sensorData, 0, sizeof(sensorData));
+    // Initialize sensor data structure (only on first boot, preserve values between wakes)
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) {
+        memset(&sensorData, 0, sizeof(sensorData));
+    }
+    // Always reset these flags for each wake cycle
     sensorDataReceived = false;
+    sensorData.valid = false;
     
     Serial.printf("⏰ Sensor read timeout: %d seconds\n", SENSOR_READ_TIMEOUT_MS / 1000);
     
