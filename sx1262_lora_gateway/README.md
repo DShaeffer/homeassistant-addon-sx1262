@@ -1,32 +1,31 @@
 ﻿# SX1262 LoRa Gateway for Home Assistant
 
-A general-purpose LoRa to MQTT gateway add-on for Home Assistant. Receives LoRa packets from ESP32/Arduino devices with SX126x radios and publishes them to MQTT for easy integration with Home Assistant.
+A universal LoRa to MQTT gateway add-on for Home Assistant. Receives LoRa packets from ESP32/Arduino devices with SX126x radios and publishes them to MQTT with automatic JSON parsing for seamless Home Assistant integration.
 
-## Features
+See the complete documentation and examples at: https://github.com/DShaeffer/homeassistant-addon-sx1262
 
--  **Universal Compatibility**: Works with any LoRa device using SX126x radios (SX1261, SX1262, SX1268)
--  **Flexible Configuration**: Full control over LoRa parameters (frequency, spreading factor, bandwidth, coding rate, sync word)
--  **Auto JSON Parsing**: Automatically publishes all JSON fields as individual MQTT topics
--  **Signal Quality Monitoring**: Reports RSSI and SNR for each received packet
--  **Home Assistant Native**: Designed for seamless integration with Home Assistant
--  **Advanced Sync Word Options**: Support for precise sync word control for challenging compatibility scenarios
+## ✨ Features
 
-## Hardware Requirements
+- 🎯 **Universal Compatibility** - Works with any LoRa device using SX126x radios
+- 📡 **Flexible Configuration** - Full control over LoRa parameters
+- 🔄 **Auto JSON Parsing** - Automatically flattens nested JSON and creates individual MQTT topics
+- 📊 **Signal Quality Monitoring** - Reports RSSI and SNR for each packet
+- 🏠 **Home Assistant Native** - Seamless MQTT integration
+- 🚰 **Production Example** - Includes complete ME201W water sensor bridge application
 
-- Raspberry Pi (any model with 40-pin GPIO header)
-- **Waveshare SX1262 LoRa HAT** (868MHz or 915MHz depending on your region)
-- Home Assistant OS or Supervised installation
+## 🔌 Hardware Requirements
 
-## Installation
+- Raspberry Pi (3/4/5 or Zero 2 W)
+- [Waveshare SX1262 LoRa HAT](https://www.waveshare.com/sx1262-lorawan-hat.htm) (915MHz for US, 868MHz for EU)
+- Home Assistant OS or Supervised
+- MQTT Broker (Mosquitto add-on recommended)
 
-1. Add this repository to your Home Assistant Add-on Store:
-   - Navigate to **Settings**  **Add-ons**  **Add-on Store** (three dots menu, top right)  **Repositories**
-   - Add: `https://github.com/DShaeffer/homeassistant-addon-sx1262`
+## 📥 Quick Start
 
-2. Install the **SX1262 LoRa Gateway** add-on
+1. **Enable SPI** on your Raspberry Pi (required for HAT communication)
+2. **Add repository** to Home Assistant: `https://github.com/DShaeffer/homeassistant-addon-sx1262`
+3. **Install** SX1262 LoRa Gateway add-on
+4. **Configure** LoRa parameters (must match your ESP32 settings)
+5. **Start** the add-on and check logs
 
-3. Configure the add-on (see Configuration section below)
-
-4. Start the add-on and check the logs
-
-See the complete documentation at: https://github.com/DShaeffer/homeassistant-addon-sx1262/blob/main/sx1262_lora_gateway/README.md
+For detailed installation and configuration, see the full documentation link above.

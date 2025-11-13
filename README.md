@@ -1,403 +1,278 @@
-﻿# Home Assistant SX1262 LoRa Gateway# Home Assistant Add-ons for SX1262 LoRa# SX1262 LoRa Gateway Add-on for Home Assistant
-
-
+﻿# SX1262 LoRa Gateway for Home Assistant
 
 [![Add repository to Home Assistant][repository-badge]][repository-url]
 
-
-
-A general-purpose LoRa to MQTT gateway add-on for Home Assistant. Works with any ESP32/Arduino device using SX126x radios (SX1261, SX1262, SX1268).This repository contains Home Assistant add-ons for working with SX1262 LoRa devices.This add-on enables your Raspberry Pi with a Waveshare SX1262 LoRaWAN HAT to receive LoRa messages from 
-
-
-
-[repository-badge]: https://img.shields.io/badge/Add%20repository%20to%20my-Home%20Assistant-41BDF5?logo=home-assistant&style=for-the-badgeremote sensors (such as the ESP32 water sensor bridge) and integrate them into Home Assistant via MQTT. 
-
+[repository-badge]: https://img.shields.io/badge/Add%20repository%20to%20my-Home%20Assistant-41BDF5?logo=home-assistant&style=for-the-badge
 [repository-url]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FDShaeffer%2Fhomeassistant-addon-sx1262
 
-## Add-ons## Hardware Requirements
+A complete LoRa to MQTT gateway system for Home Assistant. This repository includes both the Raspberry Pi gateway add-on and a production-ready ESP32 water sensor bridge application demonstrating deep sleep power management, button wake, and seamless Home Assistant integration.
 
-## Features
+## 🌟 What's Included
 
+### 1. Home Assistant Gateway Add-on
+A universal LoRa receiver that runs on your Raspberry Pi with a Waveshare SX1262 HAT. Receives LoRa packets from any ESP32/Arduino device and publishes them to MQTT with automatic JSON parsing.
 
+**📂 Location:** [`sx1262_lora_gateway/`](sx1262_lora_gateway/)
 
-- 🎯 **Universal Compatibility**: Works with any SX126x LoRa device
+### 2. ESP32 Water Sensor Bridge (Production Example)
+A complete, production-ready application for reading Tuya ME201W water sensors via serial and transmitting via LoRa. Features advanced power management with deep sleep, button wake for display, and complete Home Assistant integration.
 
-- 📡 **Flexible Configuration**: Full control over LoRa parameters### SX1262 LoRa Gateway- Raspberry Pi (3/4/5 or Zero 2 W)
+**📂 Location:** [`esp32_tuya_me201ws_serial_reader/`](esp32_tuya_me201ws_serial_reader/)
 
-- 🔄 **Auto JSON Parsing**: Automatically creates MQTT topics from any JSON structure
+### 3. ESP32 Test Sketches
+Simple test applications for validating LoRa communication during initial setup.
 
-- 📊 **Signal Monitoring**: RSSI and SNR reporting for each packet- [Waveshare SX1262 LoRaWAN HAT](https://www.waveshare.com/sx1262-lorawan-hat.htm)
+**📂 Location:** [`esp32_tests/`](esp32_tests/)
 
-- 🏠 **Home Assistant Native**: Seamless MQTT integration
+## ✨ Key Features
 
-- 🔧 **Advanced Sync Word Options**: Multiple configuration methods for device compatibilityA LoRa receiver add-on for Waveshare SX1262 HAT that receives data from remote sensors and publishes to MQTT.- Properly installed HAT on GPIO pins
+- 🎯 **Universal Compatibility**: Works with any SX126x LoRa device (SX1261, SX1262, SX1268)
+- 📡 **Flexible Configuration**: Full control over LoRa parameters (frequency, SF, BW, CR, sync word)
+- 🔄 **Auto JSON Parsing**: Automatically creates MQTT topics from nested JSON structures
+- 📊 **Signal Monitoring**: RSSI and SNR reporting for every packet
+- 🏠 **Home Assistant Native**: Seamless MQTT integration with auto-discovery support
+- � **Low Power**: ESP32 deep sleep with wake-on-serial and button wake
+- 🔧 **Production Ready**: Complete working example with the ME201W water sensor
 
+## 🚀 Quick Start
 
+### Hardware Requirements
 
-## Quick Start
+**Gateway (Receiver):**
+- Raspberry Pi (3/4/5 or Zero 2 W)
+- [Waveshare SX1262 LoRaWAN HAT](https://www.waveshare.com/sx1262-lorawan-hat.htm) (915MHz for US)
+- Home Assistant OS or Supervised installation
 
+**Transmitter (Example):**
+- Heltec WiFi LoRa 32 V3 (ESP32-S3 + SX1262)
+- Tuya ME201W water sensor (optional, for full water sensor bridge)
 
 
-### 1. Install the Add-on[![Add repository to Home Assistant][repository-badge]][repository-url]## Features
 
+**Transmitter (Example):**
+- Heltec WiFi LoRa 32 V3 (ESP32-S3 + SX1262)
+- Tuya ME201W water sensor (optional, for full water sensor bridge)
 
+### Installation Steps
 
-Click the button above or manually add this repository:
+1. **Install the Gateway Add-on**
 
+   Click the button at the top of this page or manually add this repository:
+   - Go to **Settings** → **Add-ons** → **Add-on Store** (three dots menu) → **Repositories**
+   - Add: `https://github.com/DShaeffer/homeassistant-addon-sx1262`
+   - Find **SX1262 LoRa Gateway** and click **Install**
 
+2. **Configure LoRa Parameters**
 
-1. Go to **Settings** → **Add-ons** → **Add-on Store** (three dots menu, top right) → **Repositories**## Installation- Receives LoRa messages on 915MHz (configurable)
+   Set your region-specific frequency and LoRa parameters (must match ESP32 settings):
+   ```yaml
+   lora_frequency: 915.0           # US: 915, EU: 868
+   lora_spreading_factor: 7        # SF7-SF12
+   lora_bandwidth: 125000          # 125kHz
+   lora_sync_word: 0x12           # Must match ESP32
+   ```
 
-2. Add: `https://github.com/DShaeffer/homeassistant-addon-sx1262`
+3. **Start the Gateway**
 
-3. Find **SX1262 LoRa Gateway** and click **Install**- Parses JSON sensor data from ESP32 bridge
+   Click **Start** and check the logs for "LoRa receiver initialized"
 
+4. **Program Your ESP32**
 
+   - For testing: Use [Heltec_Gateway_Test](esp32_tests/Heltec_Gateway_Test/)
+   - For production: Use [ME201W Water Sensor Bridge](esp32_tuya_me201ws_serial_reader/)
 
-### 2. Hardware Required1. Click the button above or manually add this repository to your Home Assistant instance:- Publishes to MQTT for Home Assistant integration
+5. **Add Sensors to Home Assistant**
 
+   The gateway auto-creates MQTT topics. Add them to your `configuration.yaml` (see examples below)
 
+## 📡 MQTT Topic Structure
 
-- **Gateway**: Raspberry Pi with Waveshare SX1262 LoRa HAT   - Go to **Settings** → **Add-ons** → **Add-on Store** - Configurable LoRa parameters (SF, BW, CR, sync word)
+The gateway automatically creates MQTT topics from JSON payloads. 
 
-- **Transmitter**: ESP32/Arduino with SX126x radio (Heltec, TTGO, etc.)
-
-   - Click the three dots menu (⋮) in the top right- Signal quality monitoring (RSSI, SNR)
-
-### 3. Configure & Start
-
-   - Select **Repositories**- Gateway statistics tracking
-
-1. Configure LoRa parameters (frequency, spreading factor, bandwidth)
-
-2. Set MQTT broker settings (default: `core-mosquitto`)   - Add: `https://github.com/DShaeffer/homeassistant-addon-sx1262`- Auto-discovery compatible MQTT topics
-
-3. Start the add-on
-
-   - Click **Add**
-
-### 4. Test with ESP32
-
-## Installation
-
-See the [Heltec Example](esp32_tests/Heltec_Gateway_Test/) for a ready-to-use Arduino sketch.
-
-2. The add-ons from this repository will now be available in your add-on store.
-
-## Documentation
-
-1. **Enable SPI on your Raspberry Pi:**
-
-- **Gateway Documentation**: [sx1262_lora_gateway/README.md](sx1262_lora_gateway/README.md)
-
-- **Heltec ESP32 Example**: [esp32_tests/Heltec_Gateway_Test/README.md](esp32_tests/Heltec_Gateway_Test/README.md)## Support   - Go to Supervisor â System â Host â Hardware
-
-- **Changelog**: [sx1262_lora_gateway/CHANGELOG.md](sx1262_lora_gateway/CHANGELOG.md)
-
-   - Click the three dots menu â "Import from USB"
-
-## Basic Configuration
-
-For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/DShaeffer/homeassistant-addon-sx1262).   - Or via SSH: `raspi-config` â Interfacing Options â SPI â Enable
-
-```yaml
-
-lora_frequency: 915.0              # Your region (US: 915, EU: 868)
-
-lora_spreading_factor: 7           # SF7-SF12
-
-lora_bandwidth: 125000             # 125kHz for long range[repository-badge]: https://img.shields.io/badge/Add%20repository%20to%20my-Home%20Assistant-41BDF5?logo=home-assistant&style=for-the-badge2. **Add the repository to Home Assistant:**
-
-lora_coding_rate: 5                # 4/5 coding rate
-
-lora_sync_word: 52                 # Standard private network[repository-url]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FDShaeffer%2Fhomeassistant-addon-sx1262   - Go to Supervisor â Add-on Store
-
-mqtt_host: core-mosquitto
-
-mqtt_topic_prefix: "lora/gateway"  # Customize for your use   - Click the three dots menu (top right) â Repositories
-
-```   - Add this repository URL: `file:///config/addons/homeassistant-addon-sx1262`
-
-   - Or copy the addon folder to `/addons/` directory
-
-## MQTT Topic Structure
-
-3. **Install the add-on:**
-
-The gateway automatically creates MQTT topics from your JSON payloads:   - Find "SX1262 LoRa Gateway" in the add-on store
-
-   - Click on it and press "INSTALL"
-
-**Example:** Sending this JSON:
-
-```json4. **Configure the add-on:**
-
-{   - Go to the Configuration tab
-
-  "temperature": 23.5,   - Set your LoRa parameters (must match ESP32 settings!)
-
-  "humidity": 65,   - Configure MQTT broker (default: core-mosquitto)
-
-  "battery": {"voltage": 3.95}   - Click "SAVE"
-
+**Example:** ESP32 sends this JSON:
+```json
+{
+  "water": {
+    "level": 85.2,
+    "percent": 76,
+    "state": 0
+  },
+  "batt": {
+    "voltage": 4.15,
+    "unit": 95
+  }
 }
-
-```5. **Start the add-on:**
-
-   - Go to the Info tab
-
-**Creates these topics:**   - Toggle "Start on boot" if desired
-
-- `lora/gateway/temperature` → `23.5`   - Click "START"
-
-- `lora/gateway/humidity` → `65`
-
-- `lora/gateway/battery/voltage` → `3.95`## Configuration
-
-- `lora/gateway/rssi` → `-45.0` (signal strength)
-
-- `lora/gateway/snr` → `9.5` (signal quality)### LoRa Settings
-
-
-
-## Example Home Assistant Sensors```yaml
-
-lora_frequency: 915.0          # Frequency in MHz (902-928 for US)
-
-```yamllora_spreading_factor: 7       # SF7-SF12 (7=fastest, 12=longest range)
-
-mqtt:lora_bandwidth: 125000         # Bandwidth in Hz (125kHz default)
-
-  sensor:lora_coding_rate: 5            # 4/5, 4/6, 4/7, 4/8
-
-    - name: "LoRa Temperature"lora_sync_word: 0x12          # Must match ESP32 setting
-
-      state_topic: "lora/gateway/temperature"lora_tx_power: 20             # TX power in dBm (2-22)
-
-      unit_of_measurement: "°C"```
-
-      device_class: temperature
-
-      ### MQTT Settings
-
-    - name: "LoRa Signal Strength"
-
-      state_topic: "lora/gateway/rssi"```yaml
-
-      unit_of_measurement: "dBm"mqtt_host: core-mosquitto      # MQTT broker hostname
-
-      device_class: signal_strengthmqtt_port: 1883               # MQTT broker port
-
-```mqtt_username: ""             # Optional MQTT username
-
-mqtt_password: ""             # Optional MQTT password
-
-## Supported Hardwaremqtt_topic_prefix: "lora/water_sensor"  # Topic prefix for all messages
-
 ```
 
-### Gateway (Receiver)
+**Gateway creates these topics:**
+- `lora/gateway/water/level` → `85.2`
+- `lora/gateway/water/percent` → `76`
+- `lora/gateway/water/state` → `0`
+- `lora/gateway/batt/voltage` → `4.15`
+- `lora/gateway/batt/unit` → `95`
+- `lora/gateway/rssi` → `-35.2` (signal strength)
+- `lora/gateway/snr` → `9.75` (signal quality)
 
-- Waveshare SX1262 LoRa HAT (868MHz or 915MHz)### Logging
+## 🏡 Home Assistant Integration
 
-- Raspberry Pi (any model with 40-pin GPIO)
+Add these sensors to your `configuration.yaml`:
 
 ```yaml
-
-### Transmitters (Tested)log_level: info               # debug, info, warning, error
-
-- ✅ Heltec WiFi LoRa 32 V3 (ESP32-S3 + SX1262)```
-
-- ✅ Heltec WiFi LoRa 32 V2
-
-- ✅ TTGO LoRa boards## MQTT Topics
-
-- ✅ Generic ESP32 + SX126x combinations
-
-The add-on publishes to the following topics:
-
-## Project Structure
-
-### Main Data Topics
-
-```- `lora/water_sensor/data` - Complete JSON payload
-
-homeassistant-addon-sx1262/- `lora/water_sensor/status` - Gateway online/offline status
-
-├── sx1262_lora_gateway/          # Home Assistant add-on- `lora/water_sensor/last_seen` - Last message timestamp
-
-│   ├── README.md                 # Complete documentation
-
-│   ├── CHANGELOG.md              # Version history### Water Sensor Topics
-
-│   ├── config.yaml               # Add-on configuration- `lora/water_sensor/water/level` - Water level in cm
-
-│   └── lora_gateway.py           # Gateway application- `lora/water_sensor/water/percent` - Water level percentage
-
-│- `lora/water_sensor/water/raw_distance` - Raw ultrasonic distance
-
-└── esp32_tests/- `lora/water_sensor/water/state` - Alarm state (0=normal, 1=low, 2=high)
-
-    ├── Heltec_Gateway_Test/      # Ready-to-use example
-
-    │   ├── README.md             # Upload instructions### Battery Topics
-
-    │   └── Heltec_Gateway_Test.ino- `lora/water_sensor/battery/voltage` - Battery voltage
-
-    │- `lora/water_sensor/battery/unit` - Battery level (0-100)
-
-    └── LoRa_TX_Test_Simple/      # Development/diagnostic version
-
-```### Signal Quality Topics
-
-- `lora/water_sensor/rssi` - Received Signal Strength Indicator (dBm)
-
-## Troubleshooting- `lora/water_sensor/snr` - Signal-to-Noise Ratio (dB)
-
-
-
-### No Packets Received?### Gateway Statistics
-
-- `lora/water_sensor/gateway/stats` - Gateway statistics (JSON)
-
-1. **Check Frequency**: US=915MHz, EU=868MHz - must match exactly
-
-2. **Try Sync Word Override**: Add `lora_sync_word_force: "0x3424"` to config## Home Assistant Integration
-
-3. **Verify Distance**: Start with devices < 10 meters apart
-
-4. **Check Logs**: Look for "RSSIinst" showing RF activityAfter the add-on is running, add these sensors to your `configuration.yaml`:
-
-
-
-### Weak Signal?```yaml
-
 mqtt:
-
-1. **Increase TX Power**: Try 20 dBm on transmitter  sensor:
-
-2. **Increase Spreading Factor**: SF9 or SF10 for longer range    # Water Level
-
-3. **Check Antenna**: Ensure properly connected    - name: "Water Tank Level"
-
-      state_topic: "lora/water_sensor/water/level"
-
-See the [complete troubleshooting guide](sx1262_lora_gateway/README.md#troubleshooting).      unit_of_measurement: "cm"
-
+  sensor:
+    # Water Level Sensors
+    - name: "Water Tank Level"
+      state_topic: "lora/gateway/water/level"
+      unit_of_measurement: "cm"
+      device_class: distance
       icon: mdi:water-well
-
-## Version History
-
+    
     - name: "Water Tank Percent"
-
-- **v1.0.0** (2025-11-11): First production release - General-purpose gateway      state_topic: "lora/water_sensor/water/percent"
-
-- Previous versions were development releases      unit_of_measurement: "%"
-
+      state_topic: "lora/gateway/water/percent"
+      unit_of_measurement: "%"
       icon: mdi:water-percent
-
-See [CHANGELOG.md](sx1262_lora_gateway/CHANGELOG.md) for details.
-
-    # Battery
-
-## Use Cases    - name: "Water Sensor Battery"
-
-      state_topic: "lora/water_sensor/battery/voltage"
-
-This gateway can be used for:      unit_of_measurement: "V"
-
-- 🌡️ Remote temperature/humidity monitoring      device_class: voltage
-
-- 🔋 Battery-powered sensor networks      icon: mdi:battery
-
-- 🚰 Tank level monitoring
-
-- 🌾 Agricultural sensors    # Signal Quality
-
-- 🏡 Smart home IoT devices    - name: "Water Sensor RSSI"
-
-- 📊 Environmental monitoring stations      state_topic: "lora/water_sensor/rssi"
-
-- 🔔 Alarm/notification systems      unit_of_measurement: "dBm"
-
-      icon: mdi:signal
-
-Anything that can send JSON over LoRa!
-
+    
+    # Battery Sensors
+    - name: "Water Sensor Battery"
+      state_topic: "lora/gateway/batt/voltage"
+      unit_of_measurement: "V"
+      device_class: voltage
+    
+    - name: "Water Sensor Battery Level"
+      state_topic: "lora/gateway/batt/unit"
+      unit_of_measurement: "%"
+      device_class: battery
+    
+    # Signal Quality
+    - name: "Water Sensor RSSI"
+      state_topic: "lora/gateway/rssi"
+      unit_of_measurement: "dBm"
+      device_class: signal_strength
+    
     - name: "Water Sensor SNR"
-
-## Contributing      state_topic: "lora/water_sensor/snr"
-
+      state_topic: "lora/gateway/snr"
       unit_of_measurement: "dB"
+      icon: mdi:signal-variant
+  
+  binary_sensor:
+    # Water Level Alarm
+    - name: "Water Tank Alarm"
+      state_topic: "lora/gateway/water/state"
+      payload_off: "0"
+      payload_on: "1"
+      device_class: problem
+```
 
-Contributions welcome! Please open an issue or pull request.      icon: mdi:signal-variant
+After restarting Home Assistant, your sensors will appear and can be added to your dashboard.
 
+## 📚 Documentation
 
+- **[Gateway Add-on Documentation](sx1262_lora_gateway/README.md)** - Complete gateway configuration and troubleshooting
+- **[ME201W Water Sensor Bridge](esp32_tuya_me201ws_serial_reader/README.md)** - Production ESP32 application with deep sleep
+- **[ESP32 Test Sketches](esp32_tests/README.md)** - Simple examples for testing LoRa communication
+- **[Changelog](sx1262_lora_gateway/CHANGELOG.md)** - Version history
 
-## Support    # Last Seen
+## 🔧 Troubleshooting
 
-    - name: "Water Sensor Last Seen"
+### No Packets Received?
 
-- **Issues**: [GitHub Issues](https://github.com/DShaeffer/homeassistant-addon-sx1262/issues)      state_topic: "lora/water_sensor/last_seen"
+1. **Check Frequency**: US=915MHz, EU=868MHz - must match exactly between gateway and ESP32
+2. **Verify Sync Word**: Must be identical on both devices (default: `0x12`)
+3. **Check Distance**: Start with devices < 10 meters apart for initial testing
+4. **Monitor Logs**: Gateway logs show RSSI even when packets fail to decode
 
-- **Discussions**: [GitHub Discussions](https://github.com/DShaeffer/homeassistant-addon-sx1262/discussions)      icon: mdi:clock-outline
+### Weak Signal (RSSI < -100 dBm)?
 
+1. **Check Antennas**: Ensure properly connected on both devices
+2. **Increase TX Power**: Try 22 dBm on ESP32 (within legal limits)
+3. **Increase Spreading Factor**: SF9 or SF10 for longer range (slower data rate)
+4. **Line of Sight**: Obstacles significantly reduce range
 
+### ESP32 Not Transmitting?
 
-## License  binary_sensor:
+1. **Check Serial Monitor**: Verify LoRa initialization succeeded
+2. **Verify Pin Configuration**: Heltec V3 uses specific pins (see code)
+3. **Check Power**: Low battery can prevent LoRa transmission
 
-    # Gateway Status
+See the [complete troubleshooting guide](sx1262_lora_gateway/README.md#troubleshooting) for more details.
 
-MIT License - Free to use and modify    - name: "LoRa Gateway"
+## 💡 Use Cases
 
-      state_topic: "lora/water_sensor/status"
+This system is perfect for:
 
-## Credits      payload_on: "online"
+- 🚰 **Water Tank Monitoring** - Track levels remotely with low power consumption
+- 🌡️ **Environmental Sensors** - Temperature, humidity, soil moisture
+- 🔋 **Battery-Powered IoT** - Deep sleep enables months of battery life
+- 🏡 **Smart Home Sensors** - Door/window sensors, motion detectors
+- 📊 **Agricultural Monitoring** - Soil conditions, weather stations
+- 🔔 **Alarm Systems** - Remote notifications without WiFi/cellular
 
-      payload_off: "offline"
+Anything that needs wireless sensing beyond WiFi range with low power consumption!
 
-- Built with [LoRaRF Python Library](https://github.com/chandrawi/LoRaRF-Python)      device_class: connectivity
+## 🎯 Project Structure
 
-- Designed for Waveshare SX1262 LoRa HAT```
+```
+homeassistant-addon-sx1262/
+├── README.md                                  # This file
+├── repository.json                            # HA add-on repository config
+│
+├── sx1262_lora_gateway/                       # Raspberry Pi Gateway Add-on
+│   ├── README.md                              # Complete gateway documentation
+│   ├── CHANGELOG.md                           # Version history
+│   ├── config.yaml                            # Add-on configuration schema
+│   ├── Dockerfile                             # Container build
+│   ├── lora_gateway.py                        # Main gateway application
+│   └── LoRaRF/                               # LoRa radio library
+│
+├── esp32_tuya_me201ws_serial_reader/         # Production Water Sensor Bridge
+│   ├── README.md                              # Complete bridge documentation
+│   └── esp32_tuya_me201ws_serial_reader.ino  # Main application (~1100 lines)
+│
+└── esp32_tests/                               # Test & Development Sketches
+    ├── README.md                              # Testing guide
+    ├── Heltec_Gateway_Test/                  # Simple LoRa test (recommended)
+    ├── LoRa_TX_Test_Simple/                  # Basic transmission test
+    └── [other test sketches]/                # Various diagnostic tools
+```
 
+## 🌟 Key Features of the ME201W Water Sensor Bridge
+
+The included ESP32 application demonstrates production-level code:
+
+- ✅ **Deep Sleep Power Management** - Wake on UART activity from sensor
+- ✅ **Button Wake** - Press PRG button to view stats on OLED display
+- ✅ **Reboot-to-Sleep Strategy** - Eliminates deep sleep crashes
+- ✅ **Complete Data Validation** - Only transmits when full sensor data received
+- ✅ **LoRa Transmission** - Reliable 915MHz SF7 communication
+- ✅ **OLED Display** - Shows sensor data and statistics on demand
+- ✅ **JSON Payload** - Structured data for easy Home Assistant integration
+- ✅ **Signal Reporting** - RSSI and SNR visible in Home Assistant
+
+Typical power consumption: 
+- Deep sleep: ~2-5mA
+- Active transmission: ~100-120mA for <1 second
+- Display active: ~50-80mA for 30 seconds
+
+With solar charging and 18650 battery, this system can run indefinitely!
+
+## 🤝 Contributing
+
+Contributions welcome! Please open an issue or pull request.
+
+## 💬 Support
+
+- **Issues**: [GitHub Issues](https://github.com/DShaeffer/homeassistant-addon-sx1262/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/DShaeffer/homeassistant-addon-sx1262/discussions)
+
+## 📄 License
+
+MIT License - Free to use and modify
+
+## 🙏 Credits
+
+- Built with [LoRaRF Python Library](https://github.com/chandrawi/LoRaRF-Python)
+- Designed for [Waveshare SX1262 LoRa HAT](https://www.waveshare.com/sx1262-lorawan-hat.htm)
 - Compatible with Heltec, TTGO, and generic SX126x boards
+- Tested with Tuya ME201W ultrasonic water sensors[![Add repository to Home Assistant][repository-badge]][repository-url]## Features
 
-## Troubleshooting
 
-### Add-on won't start
-- Check that SPI is enabled on the Raspberry Pi
-- Verify the HAT is properly seated on GPIO pins
-- Check logs for specific error messages
-
-### No messages received
-- Verify ESP32 is transmitting (check ESP32 Serial Monitor)
-- Ensure LoRa parameters match between ESP32 and gateway
-- Check antenna connections on both devices
-- Verify frequency is correct for your region (915MHz for US)
-
-### MQTT not working
-- Verify Mosquitto broker add-on is installed and running
-- Check MQTT credentials if authentication is enabled
-- Test MQTT connection with MQTT Explorer
-
-### Poor signal quality
-- Move devices closer together initially to verify communication
-- Check antenna orientation (vertical is best for omni-directional)
-- Increase spreading factor (reduces speed but increases range)
-- Check for interference sources
-
-## Support
-
-For issues specific to:
-- **The add-on**: Check add-on logs in Home Assistant
-- **The Waveshare HAT**: Refer to [Waveshare documentation](https://www.waveshare.com/wiki/SX1262_LoRaWA
-N_HAT)
-- **Home Assistant**: Visit [Home Assistant forums](https://community.home-assistant.io/)
-
-## License
-
-MIT License - feel free to modify and distribute.
-
-## Version History
-
-See CHANGELOG.md for version history.
