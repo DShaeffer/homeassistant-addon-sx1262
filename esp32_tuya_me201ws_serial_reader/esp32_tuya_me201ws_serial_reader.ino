@@ -112,22 +112,17 @@ struct ME201WData {
     // Raw sensor readings
     float rawDistance_cm;         // R_L: Distance from sensor to liquid surface
     float batteryVoltage;         // Bat_V: Battery voltage
-    int batteryUnit;              // S_Battery: Battery level (0-100 scale?)
+    int batteryUnit;              // S_Battery: Battery level (0-100 scale)
     float temperature;            // Temp: Temperature sensor (often unused/0)
-    
-    // Cached computed values
-    int levelCache_cm;            // Level_Cache: Inst_H - R_L (actual liquid height)
-    int percentCache;             // Percent_Cache: Computed % based on thresholds
-    int stateCache;               // State_Cache: 0=normal, 1=low alarm, 2=high alarm
     
     // Installation configuration (set via app)
     int instHeight_cm;            // Inst_H: Sensor to bottom distance
-    int depthMax_cm;              // Dep_Max: Max depth for % calculations (usually = Inst_H)
+    int depthMax_cm;              // Dep_Max: Max depth for % calculations
     int maxThreshold;             // Max: High alarm threshold %
     int minThreshold;             // Mini: Low alarm threshold %
     
-    // Real-time reported state (mirrors cached values)
-    int sensorState;              // S_State: Current alarm state
+    // Real-time reported state
+    int sensorState;              // S_State: Current alarm state (0=normal, 1=low, 2=high)
     int sensorLevel_cm;           // S_Level: Current liquid height
     int sensorPercent;            // S_Percent: Current % full
     
@@ -171,7 +166,6 @@ RTC_DATA_ATTR uint32_t timerWakeCount = 0;
 RTC_DATA_ATTR uint32_t uartWakeCount = 0;
 
 // Sleep state
-bool readyForSleep = false;
 bool sensorDataReceived = false;
 uint32_t wakeTime = 0;
 
@@ -185,8 +179,7 @@ bool receivedThisWake_InstHeight = false;
 bool loraInitialized = false;
 static RadioEvents_t RadioEvents;
 
-// Fast path: reboot into deep sleep after TX to avoid peripheral teardown races
-#define REBOOT_BEFORE_SLEEP 1
+// Reboot-to-sleep magic flag (avoids deep sleep crashes)
 RTC_DATA_ATTR uint32_t rebootToSleepMagic = 0;
 #define REBOOT_TO_SLEEP_MAGIC 0xDEED5EEDul
 
@@ -257,8 +250,8 @@ void showDataPage() {
         // Line 4: Status
         String status = sensorData.wifiState ? "WiFi:ON" : "WiFi:OFF";
         if (sensorData.lowPowerMode) status += " LP";
-        if (sensorData.stateCache == 1) status = "LOW ALARM!";
-        if (sensorData.stateCache == 2) status = "HIGH ALARM!";
+        if (sensorData.sensorState == 1) status = "LOW ALARM!";
+        if (sensorData.sensorState == 2) status = "HIGH ALARM!";
         oled.drawString(0, 48, status);
         
     } else {
@@ -392,7 +385,7 @@ void parseSensorLine(String line) {
         return;
     }
     
-    // Parse data fields - ALWAYS update when received (overwrite NVS cached values)
+    // Parse data fields - update when received
     
     // Raw distance from sensor to liquid surface
     if (line.indexOf("R_L =") != -1) {
@@ -403,40 +396,20 @@ void parseSensorLine(String line) {
         Serial.printf("📏 Raw Distance: %.1f cm (sensor to surface) [NEW]\n", sensorData.rawDistance_cm);
     }
     
-    // Cached computed liquid height (Inst_H - R_L)
-    if (line.indexOf("Level_Cache =") != -1) {
-        sensorData.levelCache_cm = parseInt(line, "Level_Cache =");
-        Serial.printf("💧 Level Cache: %d cm (computed height)\n", sensorData.levelCache_cm);
-    }
-    
-    // Cached percent full
-    if (line.indexOf("Percent_Cache =") != -1) {
-        sensorData.percentCache = parseInt(line, "Percent_Cache =");
-        Serial.printf("📊 Percent Cache: %d%%\n", sensorData.percentCache);
-    }
-    
-    // Cached alarm state (0=normal, 1=low, 2=high)
-    if (line.indexOf("State_Cache =") != -1) {
-        sensorData.stateCache = parseInt(line, "State_Cache =");
-        const char* stateStr = (sensorData.stateCache == 0) ? "Normal" :
-                               (sensorData.stateCache == 1) ? "LOW ALARM" : "HIGH ALARM";
-        Serial.printf("🚨 State Cache: %d (%s)\n", sensorData.stateCache, stateStr);
-    }
-    
-    // Real-time sensor level (same as Level_Cache, updated live)
+    // Real-time sensor level
     if (line.indexOf("S_Level =") != -1) {
         sensorData.sensorLevel_cm = parseInt(line, "S_Level =");
         receivedThisWake_Level = true;
         Serial.printf("💧 Sensor Level: %d cm [NEW]\n", sensorData.sensorLevel_cm);
     }
     
-    // Real-time percent (same as Percent_Cache, updated live)
+    // Real-time percent
     if (line.indexOf("S_Percent =") != -1) {
         sensorData.sensorPercent = parseInt(line, "S_Percent =");
         Serial.printf("📊 Sensor Percent: %d%% [NEW]\n", sensorData.sensorPercent);
     }
     
-    // Real-time state (mirrors State_Cache)
+    // Real-time state
     if (line.indexOf("S_State =") != -1) {
         sensorData.sensorState = parseInt(line, "S_State =");
         Serial.printf("🚨 Sensor State: %d [NEW]\n", sensorData.sensorState);
@@ -498,46 +471,6 @@ void parseSensorLine(String line) {
     if (line.indexOf("Mini =") != -1) {
         sensorData.minThreshold = parseInt(line, "Mini =");
         Serial.printf("⬇️  Min Threshold: %d%% [NEW]\n", sensorData.minThreshold);
-    }
-}
-
-// Save sensor data to NVS (preserves across reboots)
-void saveSensorData() {
-    preferences.putFloat("raw_cm", sensorData.rawDistance_cm);
-    preferences.putFloat("bat_v", sensorData.batteryVoltage);
-    preferences.putInt("bat_u", sensorData.batteryUnit);
-    preferences.putInt("lvl_cm", sensorData.sensorLevel_cm);
-    preferences.putInt("pct", sensorData.sensorPercent);
-    preferences.putInt("state", sensorData.sensorState);
-    preferences.putInt("inst_cm", sensorData.instHeight_cm);
-    preferences.putInt("dep_max", sensorData.depthMax_cm);
-    preferences.putInt("max_thr", sensorData.maxThreshold);
-    preferences.putInt("min_thr", sensorData.minThreshold);
-    preferences.putInt("wifi", sensorData.wifiState);
-    preferences.putBool("valid", sensorData.valid);
-    Serial.println("💾 Sensor data saved to NVS");
-}
-
-// Load sensor data from NVS (restores after reboot)
-void loadSensorData() {
-    if (preferences.getBool("valid", false)) {
-        sensorData.rawDistance_cm = preferences.getFloat("raw_cm", 0);
-        sensorData.batteryVoltage = preferences.getFloat("bat_v", 0);
-        sensorData.batteryUnit = preferences.getInt("bat_u", 0);
-        sensorData.sensorLevel_cm = preferences.getInt("lvl_cm", 0);
-        sensorData.sensorPercent = preferences.getInt("pct", 0);
-        sensorData.sensorState = preferences.getInt("state", 0);
-        sensorData.instHeight_cm = preferences.getInt("inst_cm", 0);
-        sensorData.depthMax_cm = preferences.getInt("dep_max", 0);
-        sensorData.maxThreshold = preferences.getInt("max_thr", 0);
-        sensorData.minThreshold = preferences.getInt("min_thr", 0);
-        sensorData.wifiState = preferences.getInt("wifi", 0);
-        sensorData.valid = true;
-        Serial.println("💾 Sensor data restored from NVS");
-        Serial.printf("   Level: %d cm, Percent: %d%%, Battery: %.2fV\n",
-                     sensorData.sensorLevel_cm, sensorData.sensorPercent, sensorData.batteryVoltage);
-    } else {
-        Serial.println("💾 No saved sensor data in NVS");
     }
 }
 
@@ -762,104 +695,17 @@ void transmitLoRa() {
 // DEEP SLEEP FUNCTIONS
 // ============================================================================
 
-void enterDeepSleep() {
-    Serial.println("\n💤 ========================================");
-    Serial.println("💤 Entering Deep Sleep");
-    if (SLEEP_INTERVAL_SECONDS > 0) {
-        Serial.printf("💤 Sleep Duration: %d seconds (timer backup)\n", SLEEP_INTERVAL_SECONDS);
-    } else {
-        Serial.println("💤 Sleep Duration: until serial activity (no timer backup)");
-    }
-    
-    if (UART_WAKE_ENABLED) {
-        if (SLEEP_INTERVAL_SECONDS > 0) {
-            Serial.println("💤 Serial Wake: ENABLED (EXT0 on start bit LOW)");
-            Serial.printf("💤 Wake sources: Serial RX (GPIO %d LOW) or Timer (%ds)\n", SENSOR_SERIAL_RX, SLEEP_INTERVAL_SECONDS);
-        } else {
-            Serial.println("💤 Wake sources: Serial RX only (EXT0 on start bit LOW)");
-        }
-    } else if (SLEEP_INTERVAL_SECONDS > 0) {
-        Serial.printf("💤 Wake sources: Timer (%ds) only\n", SLEEP_INTERVAL_SECONDS);
-    }
-    
-    Serial.println("💤 ========================================\n");
-    
-    // Save data to preferences
-    preferences.putUInt("bootCount", bootCount);
-    preferences.putUInt("totalTx", totalTransmissions);
-    preferences.putUInt("btnWake", buttonWakeCount);
-    preferences.putUInt("tmrWake", timerWakeCount);
-    preferences.putUInt("uartWake", uartWakeCount);
-    
-    // Cleanly shut down peripherals to avoid deep sleep crash (V3 board requirements)
-    
-    // Turn off display
-    oled.clear();
-    oled.display();
-    VextOFF();
-    
-    // CRITICAL: Put radio to sleep BEFORE ending SPI (avoids LoadProhibited crash)
-    Radio.Sleep();
-    loraInitialized = false;  // Force full radio re-init on next wake
-    
-    // CRITICAL FOR V3: End all peripheral interfaces
-    // Set radio pins to ANALOG to reduce power leakage in deep sleep
-    pinMode(RADIO_DIO_1, ANALOG);
-    pinMode(RADIO_NSS, ANALOG);
-    pinMode(RADIO_RESET, ANALOG);
-    pinMode(RADIO_BUSY, ANALOG);
-    pinMode(LORA_CLK, ANALOG);
-    pinMode(LORA_MISO, ANALOG);
-    pinMode(LORA_MOSI, ANALOG);
-    
-    // CRITICAL: Detach interrupt handler only if it was attached (required for V3 stability)
-    if (displayActive) {
-        detachInterrupt(BUTTON_PIN);
-    }
-    
-    // CRITICAL: End all communication peripherals (required for V3)
-    Wire.end();          // I2C for OLED
-    sensorSerial.end();  // UART1 for sensor
-    Serial.end();        // UART0 for debug
-    SPI.end();           // SPI for radio
-    
-    // Give peripherals time to fully shut down
-    delay(100);
-    
-    // Configure wake sources
-    if (SLEEP_INTERVAL_SECONDS > 0) {
-        uint64_t sleepTime = SLEEP_INTERVAL_SECONDS * 1000000ULL; // Convert to microseconds
-        esp_sleep_enable_timer_wakeup(sleepTime);
-    }
-    
-    // Wake on RX LOW (UART start bit). Use EXT1 with ALL_LOW on a single pin to avoid EXT0 instability.
-    if (UART_WAKE_ENABLED) {
-        uint64_t mask = (1ULL << SENSOR_SERIAL_RX);
-        // With a single pin in mask, ALL_LOW means wake when that pin goes LOW
-        esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ALL_LOW);
-    }
-    
-    if (BUTTON_WAKE_ENABLED) {
-        // Configure button (GPIO 0) as wake source (active LOW)
-        esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
-    }
-    
-    // Enter deep sleep
-    esp_deep_sleep_start();
-}
-
 void checkWakeReason() {
     bootCount++;
     
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     
-#if REBOOT_BEFORE_SLEEP
-    // If we purposely rebooted purely to enter deep sleep (crash mitigation path)
+    // If we purposely rebooted to enter deep sleep (crash mitigation path)
     if (rebootToSleepMagic == REBOOT_TO_SLEEP_MAGIC) {
         rebootToSleepMagic = 0; // clear
-        Serial.println("\n🌅 Reboot-to-sleep fast path engaged (clean peripheral baseline)");
-        // Skip normal initialization (we haven't started sensor UART yet) and enter sleep directly
-        // Configure wake sources just like enterDeepSleep() but with minimal teardown (nothing started)
+        Serial.println("\n🌅 Reboot-to-sleep fast path (clean peripheral state)");
+        
+        // Configure wake sources (no peripherals initialized yet, so no teardown needed)
         if (UART_WAKE_ENABLED) {
             uint64_t mask = (1ULL << SENSOR_SERIAL_RX);
             esp_sleep_enable_ext1_wakeup(mask, ESP_EXT1_WAKEUP_ALL_LOW);
@@ -870,11 +716,11 @@ void checkWakeReason() {
         if (SLEEP_INTERVAL_SECONDS > 0) {
             esp_sleep_enable_timer_wakeup(SLEEP_INTERVAL_SECONDS * 1000000ULL);
         }
-        Serial.println("💤 Fast-path going to deep sleep immediately after reboot");
+        
+        Serial.println("💤 Entering deep sleep...");
         delay(50);
         esp_deep_sleep_start();
     }
-#endif
     
     Serial.println("\n🌅 ========================================");
     Serial.printf("🌅 Wake Event #%d\n", bootCount);
@@ -1188,10 +1034,9 @@ void loop() {
         
         uint32_t awakeTime = millis() - wakeTime;
         bool timedOut = (awakeTime > SENSOR_READ_TIMEOUT_MS);
-        bool hasData = sensorDataReceived;
         
-        if (readyForSleep || (timedOut && !displayActive)) {
-            if (timedOut && !hasData) {
+        if (timedOut && !displayActive) {
+            if (!sensorDataReceived) {
                 Serial.println("⚠️  Sensor read timeout - sleeping anyway");
             }
             
