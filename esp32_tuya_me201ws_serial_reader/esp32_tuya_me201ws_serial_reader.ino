@@ -386,14 +386,14 @@ void parseSensorLine(String line) {
         return;
     }
     
-    // Parse data fields
+    // Parse data fields - ALWAYS update when received (overwrite NVS cached values)
     
     // Raw distance from sensor to liquid surface
     if (line.indexOf("R_L =") != -1) {
         sensorData.rawDistance_cm = parseFloat(line, "R_L =");
         sensorData.valid = true;
         sensorData.lastUpdate = millis();
-        Serial.printf("� Raw Distance: %.1f cm (sensor to surface)\n", sensorData.rawDistance_cm);
+        Serial.printf("📏 Raw Distance: %.1f cm (sensor to surface) [NEW]\n", sensorData.rawDistance_cm);
     }
     
     // Cached computed liquid height (Inst_H - R_L)
@@ -419,30 +419,31 @@ void parseSensorLine(String line) {
     // Real-time sensor level (same as Level_Cache, updated live)
     if (line.indexOf("S_Level =") != -1) {
         sensorData.sensorLevel_cm = parseInt(line, "S_Level =");
-        Serial.printf("💧 Sensor Level: %d cm\n", sensorData.sensorLevel_cm);
+        Serial.printf("💧 Sensor Level: %d cm [NEW]\n", sensorData.sensorLevel_cm);
     }
     
     // Real-time percent (same as Percent_Cache, updated live)
     if (line.indexOf("S_Percent =") != -1) {
         sensorData.sensorPercent = parseInt(line, "S_Percent =");
-        Serial.printf("📊 Sensor Percent: %d%%\n", sensorData.sensorPercent);
+        Serial.printf("📊 Sensor Percent: %d%% [NEW]\n", sensorData.sensorPercent);
     }
     
     // Real-time state (mirrors State_Cache)
     if (line.indexOf("S_State =") != -1) {
         sensorData.sensorState = parseInt(line, "S_State =");
+        Serial.printf("🚨 Sensor State: %d [NEW]\n", sensorData.sensorState);
     }
     
     // Battery voltage
     if (line.indexOf("Bat_V =") != -1) {
         sensorData.batteryVoltage = parseFloat(line, "Bat_V =");
-        Serial.printf("🔋 Battery: %.3f V\n", sensorData.batteryVoltage);
+        Serial.printf("🔋 Battery: %.3f V [NEW]\n", sensorData.batteryVoltage);
     }
     
     // Battery level unit (0-100 scale, needs calibration)
     if (line.indexOf("S_Battery =") != -1) {
         sensorData.batteryUnit = parseInt(line, "S_Battery =");
-        Serial.printf("🔋 Battery Unit: %d\n", sensorData.batteryUnit);
+        Serial.printf("🔋 Battery Unit: %d [NEW]\n", sensorData.batteryUnit);
     }
     
     // Temperature (often unused, reads 0)
@@ -456,7 +457,7 @@ void parseSensorLine(String line) {
     // WiFi/network state (0=not connected, 1=connected to cloud)
     if (line.indexOf("W_NET =") != -1) {
         sensorData.wifiState = parseInt(line, "W_NET =");
-        Serial.printf("📶 WiFi: %s\n", sensorData.wifiState ? "Connected" : "Disconnected");
+        Serial.printf("📶 WiFi: %s [NEW]\n", sensorData.wifiState ? "Connected" : "Disconnected");
     }
     
     // Power-on time (uptime in seconds since last reset)
@@ -468,24 +469,25 @@ void parseSensorLine(String line) {
     // Installation height (sensor to tank bottom)
     if (line.indexOf("Inst_H =") != -1) {
         sensorData.instHeight_cm = parseInt(line, "Inst_H =");
-        Serial.printf("📐 Install Height: %d cm\n", sensorData.instHeight_cm);
+        Serial.printf("📐 Install Height: %d cm [NEW]\n", sensorData.instHeight_cm);
     }
     
     // Maximum depth for calculations
     if (line.indexOf("Dep_Max =") != -1) {
         sensorData.depthMax_cm = parseInt(line, "Dep_Max =");
+        Serial.printf("📏 Dep Max: %d cm [NEW]\n", sensorData.depthMax_cm);
     }
     
     // High alarm threshold percentage
     if (line.indexOf("Max =") != -1) {
         sensorData.maxThreshold = parseInt(line, "Max =");
-        Serial.printf("⬆️  Max Threshold: %d%%\n", sensorData.maxThreshold);
+        Serial.printf("⬆️  Max Threshold: %d%% [NEW]\n", sensorData.maxThreshold);
     }
     
     // Low alarm threshold percentage
     if (line.indexOf("Mini =") != -1) {
         sensorData.minThreshold = parseInt(line, "Mini =");
-        Serial.printf("⬇️  Min Threshold: %d%%\n", sensorData.minThreshold);
+        Serial.printf("⬇️  Min Threshold: %d%% [NEW]\n", sensorData.minThreshold);
     }
 }
 
