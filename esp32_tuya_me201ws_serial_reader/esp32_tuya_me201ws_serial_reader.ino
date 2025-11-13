@@ -157,6 +157,7 @@ HardwareSerial sensorSerial(1);  // Use UART1 for sensor communication
 
 // Store sensor data in RTC memory so it persists through reboot-to-sleep cycle
 RTC_DATA_ATTR ME201WData sensorData;
+RTC_DATA_ATTR bool sensorDataInitialized = false;  // Track if RTC data is valid
 String serialBuffer = "";
 uint32_t bootTime = 0;
 uint32_t displayActivatedTime = 0;
@@ -1004,9 +1005,13 @@ void setup() {
                   SENSOR_SERIAL_RX, SENSOR_BAUD_RATE);
     sensorSerial.begin(SENSOR_BAUD_RATE, SERIAL_8N1, SENSOR_SERIAL_RX, SENSOR_SERIAL_TX);
     
-    // Initialize sensor data structure (only on first boot, preserve values between wakes)
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) {
+    // Initialize sensor data structure (only if not already initialized in RTC memory)
+    if (!sensorDataInitialized) {
         memset(&sensorData, 0, sizeof(sensorData));
+        sensorDataInitialized = true;
+        Serial.println("🔧 Initialized sensor data structure");
+    } else {
+        Serial.println("♻️  Reusing sensor data from RTC memory");
     }
     // Always reset these flags for each wake cycle
     sensorDataReceived = false;
