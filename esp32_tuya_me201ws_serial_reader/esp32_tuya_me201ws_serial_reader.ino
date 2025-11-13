@@ -201,6 +201,37 @@ typedef struct {
 
 RTC_DATA_ATTR LastGoodTelemetry lastGood = {0};
 
+// Persist last-good telemetry in NVS to survive software reboot
+void saveLastGood() {
+    preferences.putInt("lg_lvl", lastGood.sensorLevel_cm);
+    preferences.putInt("lg_pct", lastGood.sensorPercent);
+    preferences.putFloat("lg_raw", lastGood.rawDistance_cm);
+    preferences.putInt("lg_inst", lastGood.instHeight_cm);
+    preferences.putInt("lg_st", lastGood.sensorState);
+    preferences.putInt("lg_max", lastGood.maxThreshold);
+    preferences.putInt("lg_min", lastGood.minThreshold);
+    preferences.putFloat("lg_bv", lastGood.batteryVoltage);
+    preferences.putInt("lg_bu", lastGood.batteryUnit);
+    preferences.putInt("lg_wifi", lastGood.wifiState);
+    preferences.putBool("lg_valid", lastGood.valid);
+}
+
+void loadLastGood() {
+    lastGood.valid = preferences.getBool("lg_valid", false);
+    if (lastGood.valid) {
+        lastGood.sensorLevel_cm = preferences.getInt("lg_lvl", 0);
+        lastGood.sensorPercent = preferences.getInt("lg_pct", 0);
+        lastGood.rawDistance_cm = preferences.getFloat("lg_raw", 0);
+        lastGood.instHeight_cm = preferences.getInt("lg_inst", 0);
+        lastGood.sensorState = preferences.getInt("lg_st", 0);
+        lastGood.maxThreshold = preferences.getInt("lg_max", 0);
+        lastGood.minThreshold = preferences.getInt("lg_min", 0);
+        lastGood.batteryVoltage = preferences.getFloat("lg_bv", 0);
+        lastGood.batteryUnit = preferences.getInt("lg_bu", 0);
+        lastGood.wifiState = preferences.getInt("lg_wifi", 0);
+    }
+}
+
 // ============================================================================
 // VEXT POWER CONTROL (OLED)
 // ============================================================================
@@ -977,6 +1008,8 @@ void setup() {
         timerWakeCount = preferences.getUInt("tmrWake", 0);
         uartWakeCount = preferences.getUInt("uartWake", 0);
     }
+    // Load last-good telemetry (persisted across software restarts)
+    loadLastGood();
     
     // Check why we woke up
     checkWakeReason();
@@ -1099,6 +1132,7 @@ void loop() {
             lastGood.batteryUnit = sensorData.batteryUnit;
             lastGood.wifiState = sensorData.wifiState;
             lastGood.valid = true;
+            saveLastGood();
 
             // Transmit via LoRa
             transmitLoRa();
@@ -1166,7 +1200,13 @@ void loop() {
         
         if (readyForSleep || (timedOut && !displayActive)) {
             if (timedOut && !hasData) {
-                Serial.println("⚠️  Sensor read timeout - sleeping anyway");
+                if (lastGood.valid) {
+                    Serial.println("⚠️  Sensor read timeout - using last-good values and transmitting anyway");
+                    transmitLoRa();
+                    totalTransmissions++;
+                } else {
+                    Serial.println("⚠️  Sensor read timeout - no last-good values available (skipping TX)");
+                }
             }
             // Use reboot-to-sleep path to avoid deep sleep panic during teardown
 #if REBOOT_BEFORE_SLEEP
