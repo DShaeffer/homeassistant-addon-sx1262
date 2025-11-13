@@ -772,8 +772,15 @@ void transmitLoRa() {
     loraTxDone = false;
     Radio.Send(txBuffer, len);
     
+    Serial.println("📡 Waiting for TX completion...");
     // Wait for TX to complete (blocking with IRQ processing)
     waitForTxDone(2500);
+    
+    if (loraTxDone) {
+        Serial.println("✅ TX confirmed done");
+    } else {
+        Serial.println("⚠️  TX timeout (still sending or failed)");
+    }
     
 #if REBOOT_BEFORE_SLEEP
     // Mark that after this TX we prefer a reboot to guarantee pristine hardware state before sleep
@@ -1122,9 +1129,8 @@ void loop() {
     // Check if we got valid sensor data (valid flag is set when R_L is received)
     // IMPROVED: Wait for multiple key fields to ensure complete data packet
     if (sensorData.valid && !sensorDataReceived) {
-        // Check for complete data: battery voltage AND at least one level reading
-        bool hasComplete = (sensorData.batteryVoltage > 0) && 
-                          (sensorData.sensorLevel_cm > 0 || sensorData.rawDistance_cm > 0);
+        Serial.printf("🔍 Checking completeness: battery=%.2fV, level=%dcm\n", 
+                     sensorData.batteryVoltage, sensorData.sensorLevel_cm);
         
         if ((sensorData.batteryVoltage > 0) && (sensorData.sensorLevel_cm > 0)) {
             sensorDataReceived = true;
@@ -1211,6 +1217,9 @@ void loop() {
         bool hasData = sensorDataReceived;
         
         if (readyForSleep || (timedOut && !displayActive)) {
+            Serial.printf("💤 Sleep condition met: readyForSleep=%d, timedOut=%d, hasData=%d, lastGood.valid=%d\n",
+                         readyForSleep, timedOut, hasData, lastGood.valid);
+            
             if (timedOut && !hasData) {
                 if (lastGood.valid) {
                     Serial.println("⚠️  Sensor read timeout - using last-good values and transmitting anyway");
